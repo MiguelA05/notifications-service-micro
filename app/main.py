@@ -2,7 +2,7 @@ from fastapi import FastAPI, Body, HTTPException
 from pydantic import BaseModel
 import asyncio
 
-from .messaging import publish_message
+from .messaging import publish_message, setup_infrastructure
 
 
 class NotifyPayload(BaseModel):
@@ -11,6 +11,11 @@ class NotifyPayload(BaseModel):
 
 
 app = FastAPI(title="notifications-service-micro", version="1.0.0")
+
+
+@app.on_event("startup")
+async def on_startup() -> None:
+    await setup_infrastructure()
 
 
 @app.get("/health")
