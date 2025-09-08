@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: notifications-service-micro
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:notificationsdb;DB_CLOSE_DELAY=-1}
+    driverClassName: ${DB_DRIVER:org.h2.Driver}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:admin}
+
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls.enable: true
+
+twilio:
+  account-sid: ${TWILIO_SID:}
+  auth-token: ${TWILIO_AUTH:}
+  whatsapp-from: ${TWILIO_WHATSAPP_FROM:}
+
+jwt:
+  secret: ${JWT_SECRET:changeThisInProd}
+  expiration-ms: 3600000
+
+# scheduling poll frequency (ms)
+notifications:
+  scheduler:
+    polling-ms: 30000
+
