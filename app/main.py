@@ -1,9 +1,12 @@
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import asyncio
 
 from .messaging import publish_message, setup_infrastructure
-from .db import create_tables, init_default_channels
+from .auth import create_access_token, verify_password, get_user_by_username, verify_token, TokenData
+from .db import get_db, create_tables, init_default_channels
 
 
 class NotifyPayload(BaseModel):
@@ -37,3 +40,14 @@ async def notify(payload: NotifyPayload = Body(...)) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/login")
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    user = get_user_by_username(db, form_data.username)
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}

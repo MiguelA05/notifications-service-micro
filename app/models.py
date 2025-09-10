@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Enum
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import func
 from datetime import datetime
+from pydantic import BaseModel
 import enum
 
 #Este archivo tendra las representaciones de las tablas de la base de datos
@@ -67,3 +68,12 @@ class NotificationMetrics(Base):
     total_failed = Column(Integer, default=0) #cantidad de notificaciones fallidas
     total_pending = Column(Integer, default=0) #cantidad de notificaciones pendientes
     date = Column(DateTime(timezone=True), server_default=func.now()) #fecha de la metrica
+
+class NotifyPayload(BaseModel):
+    destination: str
+    message: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
