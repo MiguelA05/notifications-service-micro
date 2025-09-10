@@ -23,7 +23,7 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: admin
       RABBITMQ_PASSWORD: admin
-      DB_URL: postgresql+psycopg://notifications:notifications@postgres:5432/notifications
+      DB_URL: postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       TWILIO_SID: ${TWILIO_SID:-}

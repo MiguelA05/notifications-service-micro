@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Enum
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy.orm import declarative_base
+from sqlalchemy import func
 from datetime import datetime
 import enum
 

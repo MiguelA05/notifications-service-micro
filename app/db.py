@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from .models import Base, Notification, NotificationChannel, NotificationChannelConfig, NotificationMetrics
 
 #Configuracion de la conexion a la base de datos
-DEFAULT_DB_URL = "postgresql+psycopg://notifications:notifications@localhost:5432/notifications" #URL de la base de datos
+DEFAULT_DB_URL = "postgresql+psycopg2://notifications:notifications@127.0.0.1:5432/notifications" #URL de la base de datos
 DB_URL = os.getenv("DB_URL", DEFAULT_DB_URL) #Usamos la variable de entorno DB_URL, si no existe, usamos la URL por defecto
 
 # Si una URL JDBC ingresa, ignoramos y usamos la URL por defecto
@@ -15,17 +15,24 @@ if DB_URL.startswith("jdbc:"):
     DB_URL = DEFAULT_DB_URL
 
 #Motor de la base de datos
-engine = create_engine(DB_URL, pool_pre_ping=True) #Es el "motor" que maneja la conexion a la base de datos, pool_pre_ping verifica si la conexion esta activa antes de usarla
+engine = create_engine(
+    DB_URL, 
+    pool_pre_ping=True,
+    pool_recycle=300,
+    pool_size=5,
+    max_overflow=0,
+    echo=False
+) #Es el "motor" que maneja la conexion a la base de datos, pool_pre_ping verifica si la conexion esta activa antes de usarla
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) #Es el "fabricante" de sesiones para interactuar con la base de datos
 
 
 def create_tables():
     """
-    Crea todas las tablas de la base de datos
-    Esta funcion se ejecuta cuando se inicia la aplicacion
+    Crea todas las tablas de la base de datos usando únicamente SQLAlchemy.
     """
     Base.metadata.create_all(bind=engine)
-    print("Tablas creadas correctamente")
+    print("✅ Tablas creadas correctamente con SQLAlchemy")
+
 
 def get_db():
     """
