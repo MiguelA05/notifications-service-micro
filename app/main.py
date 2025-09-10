@@ -38,6 +38,17 @@ async def notify(payload: NotifyPayload = Body(...)) -> dict:
         return {"queued": True}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    
+@app.post("/notify-auth")
+async def notify_auth(
+    payload: NotifyPayload = Body(...),
+    token_data: TokenData = Depends(verify_token)  # 🔐 JWT requerido
+) -> dict:
+    try:
+        await publish_message(routing_key="notifications.key", payload=payload.model_dump())
+        return {"queued": True, "user": token_data.username}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/login")
