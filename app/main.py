@@ -40,15 +40,12 @@ async def notify(payload: NotifyPayload = Body(...)) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
     
 @app.post("/notify-auth")
-async def notify_auth(
-    payload: NotifyPayload = Body(...),
-    token_data: TokenData = Depends(verify_token)  # 🔐 JWT requerido
-) -> dict:
-    try:
-        await publish_message(routing_key="notifications.key", payload=payload.model_dump())
-        return {"queued": True, "user": token_data.username}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+async def send_notification(payload: NotifyPayload, user_id: str = Depends(verify_token)):
+    # Aquí ya sabes que el token fue válido
+    # Puedes incluso loguear quién envió la notificación
+    await publish_message(payload.destination, payload.message)
+    return {"status": "ok", "sent_by": user_id}
+
 
 
 @app.post("/login")
