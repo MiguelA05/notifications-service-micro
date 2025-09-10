@@ -1,10 +1,11 @@
 import os
+import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 
 # Importar los modelos que cree
-from .models import Base, Notification, NotificationChannel, NotificationChannelConfig, NotificationMetrics
+from .models import Base, Notification, NotificationChannel, NotificationChannelConfig, NotificationMetrics, User
 
 #Configuracion de la conexion a la base de datos
 DEFAULT_DB_URL = "postgresql+psycopg2://notifications:notifications@127.0.0.1:5432/notifications" #URL de la base de datos
@@ -52,7 +53,7 @@ def init_default_channels():
     """
     db = SessionLocal()
     try:
-        #Verificar si ya existen cnales
+        #Verificar si ya existen canales
         existing_channels = db.query(NotificationChannelConfig).count()
 
         if existing_channels == 0:
@@ -61,21 +62,44 @@ def init_default_channels():
                 NotificationChannelConfig(
                     name=NotificationChannel.EMAIL, 
                     enabled=True, 
-                    config='{"provider": "sendgrid", "template_engine": "jinja2"}'),
+                    config=json.dumps({
+                        'provider': 'smtp',
+                        'smtp_host': 'smtp.gmail.com',
+                        'smtp_port': 587,
+                        'smtp_user': os.getenv('SMTP_USER'),
+                        'smtp_password': os.getenv('SMTP_PASSWORD'),
+                        'from_email': os.getenv('FROM_EMAIL', 'noreply@example.com'),
+                        'from_name': os.getenv('FROM_NAME', 'Notification Service'),
+                        'template_dir': 'app/templates'
+                    })),
                 NotificationChannelConfig(
                     name=NotificationChannel.SMS,
                     enabled=True,
-                    config='{"provider": "twilio", "country_code": "+1"}'
+                    config=json.dumps({
+                        'provider': 'twilio',
+                        'account_sid': os.getenv('TWILIO_ACCOUNT_SID'),
+                        'auth_token': os.getenv('TWILIO_AUTH_TOKEN'),
+                        'from_number': os.getenv('TWILIO_FROM_NUMBER')
+                    })
                 ),
                 NotificationChannelConfig(
                     name=NotificationChannel.WHATSAPP,
                     enabled=True,
-                    config='{"provider": "twilio", "business_number": "+1234567890"}'
+                    config=json.dumps({
+                        'provider': 'twilio',
+                        'account_sid': os.getenv('TWILIO_ACCOUNT_SID'),
+                        'auth_token': os.getenv('TWILIO_AUTH_TOKEN'),
+                        'from_number': os.getenv('TWILIO_WHATSAPP_FROM')
+                    })
                 ),
                 NotificationChannelConfig(
                     name=NotificationChannel.PUSH,
                     enabled=True,
-                    config='{"provider": "firebase", "project_id": "your-project"}' #TODO: Cambiar por el proyecto de Firebase
+                    config=json.dumps({
+                        'provider': 'firebase',
+                        'project_id': os.getenv('FIREBASE_PROJECT_ID'),
+                        'service_account_key': os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
+                    })
                 )
             ]
             
@@ -88,6 +112,34 @@ def init_default_channels():
             print("Canales de notificacion por defecto ya existen")
     except Exception as e:
         print(f"Error al inicializar los canales de notificacion por defecto: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+def init_default_user():
+    """Crea un usuario por defecto para pruebas"""
+    db = SessionLocal()
+    try:
+        # Verificar si ya existe un usuario
+        existing_user = db.query(User).filter(User.username == "admin").first()
+        if existing_user:
+            print("Usuario admin ya existe")
+            return
+        
+        # Crear usuario admin por defecto
+        from .auth import get_password_hash
+        admin_user = User(
+            username="admin",
+            email="admin@example.com",
+            hashed_password=get_password_hash("admin123"),
+            is_active=True
+        )
+        db.add(admin_user)
+        db.commit()
+        print("Usuario admin creado correctamente (username: admin, password: admin123)")
+        
+    except Exception as e:
+        print(f"Error al crear usuario por defecto: {e}")
         db.rollback()
     finally:
         db.close()

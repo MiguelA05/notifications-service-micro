@@ -13,9 +13,23 @@ _CHANNEL_MAP: dict[NotificationChannel, type[Channel]] = {
     NotificationChannel.PUSH: PushChannel
 }
 
-def create_channel(channel_name: NotificationChannel) -> Channel:
+def create_channel(channel_name: NotificationChannel, config: dict = None) -> Channel:
+    """
+    Crea una instancia del canal de notificacion especificado
+
+    Args:
+        channel_name: Tipo del canal de notificacion
+        config: Configuracion especifica del canal (opcional)
+
+    Returns:
+        Instancia del canal de notificacion
+    """
     try:
         channel_cls = _CHANNEL_MAP[channel_name]
     except KeyError:
         raise ValueError(f"Canal de notificacion no valido: {channel_name}")
-    return channel_cls()
+
+    #Si no se pasa configuracion, se usa la configuracion por defecto
+    if config is None:
+        config = {}
+    return channel_cls(config)

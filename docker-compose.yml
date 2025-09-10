@@ -24,12 +24,24 @@ services:
       RABBITMQ_USERNAME: admin
       RABBITMQ_PASSWORD: admin
       DB_URL: postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      TWILIO_SID: ${TWILIO_SID:-}
-      TWILIO_AUTH: ${TWILIO_AUTH:-}
+      # Email Configuration
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@example.com}
+      FROM_NAME: ${FROM_NAME:-Notification Service}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      # Twilio Configuration
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
       TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
-      JWT_SECRET: ${JWT_SECRET:-changeThisInProd}
+      # Firebase Configuration
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_SERVICE_ACCOUNT_KEY: ${FIREBASE_SERVICE_ACCOUNT_KEY:-}
+      # JWT Configuration
+      SECRET_KEY: ${SECRET_KEY:-tu-secret-key-super-secreta-cambiar-en-produccion}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
 
   postgres:
     image: postgres:16-alpine
