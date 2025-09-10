@@ -3,13 +3,13 @@ from app.models import NotificationChannel
 from .base import Channel
 from .email import EmailChannel
 from .sms import SMSChannel
-from .whatsapp import WhatsappChannel
+from .whatsapp import WhatsAppChannel
 from .push import PushChannel
 
 _CHANNEL_MAP: dict[NotificationChannel, type[Channel]] = {
     NotificationChannel.EMAIL: EmailChannel,
     NotificationChannel.SMS: SMSChannel,
-    NotificationChannel.WHATSAPP: WhatsappChannel,
+    NotificationChannel.WHATSAPP: WhatsAppChannel,
     NotificationChannel.PUSH: PushChannel
 }
 
