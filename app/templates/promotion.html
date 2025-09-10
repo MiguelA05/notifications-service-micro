@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .promo-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .offer-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .offer-box h2 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+        }
+        .price {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .original-price {
+            text-decoration: line-through;
+            opacity: 0.7;
+            font-size: 18px;
+        }
+        .discount {
+            background: #ff4757;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #ff6b6b;
+            color: white;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+        .cta-button:hover {
+            background: #ff5252;
+            transform: translateY(-2px);
+        }
+        .features {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .features h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+        .features li {
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .features li:before {
+            content: "✅ ";
+            margin-right: 10px;
+        }
+        .urgency {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            display: inline-block;
+            margin: 0 10px;
+            color: #6c757d;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="promo-badge">{{promo_type or 'OFERTA ESPECIAL'}}</div>
+            <h1>{{title}}</h1>
+            <p>{{subtitle or 'No te pierdas esta increíble oportunidad'}}</p>
+        </div>
+        <div class="content">
+            <div class="offer-box">
+                <h2>{{offer_title or '¡Oferta Limitada!'}}</h2>
+                <p>{{offer_description}}</p>
+                {% if price %}
+                <div class="price">
+                    ${{price}}
+                    {% if original_price %}
+                    <span class="original-price">${{original_price}}</span>
+                    {% endif %}
+                    {% if discount_percentage %}
+                    <span class="discount">-{{discount_percentage}}%</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if valid_until %}
+                <p><strong>Válido hasta:</strong> {{valid_until}}</p>
+                {% endif %}
+            </div>
+            
+            {% if features %}
+            <div class="features">
+                <h3>🎯 ¿Qué incluye esta oferta?</h3>
+                <ul>
+                    {% for feature in features %}
+                    <li>{{feature}}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            {% if urgency_message %}
+            <div class="urgency">
+                <strong>⏰ {{urgency_message}}</strong>
+            </div>
+            {% endif %}
+            
+            {% if cta_url %}
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{cta_url}}" class="cta-button">{{cta_text or '¡Aprovechar Oferta!'}}</a>
+            </div>
+            {% endif %}
+            
+            {% if additional_info %}
+            <div style="background: #e7f3ff; border: 1px solid #b3d9ff; color: #004085; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3>ℹ️ Información Adicional</h3>
+                <p>{{additional_info}}</p>
+            </div>
+            {% endif %}
+            
+            {% if terms_conditions %}
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-size: 12px; color: #6c757d;">
+                <h4>Términos y Condiciones:</h4>
+                <p>{{terms_conditions}}</p>
+            </div>
+            {% endif %}
+            
+            <div class="social-links">
+                <h3>📱 Síguenos en redes sociales:</h3>
+                {% if social_links %}
+                    {% for platform, url in social_links.items() %}
+                    <a href="{{url}}">{{platform|title}}</a>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        <div class="footer">
+            <p>Este email fue enviado a {{email}} porque estás suscrito a nuestras ofertas.</p>
+            <p><a href="{{unsubscribe_url}}" style="color: #6c757d;">Cancelar suscripción</a> | <a href="{{contact_url}}" style="color: #6c757d;">Contacto</a></p>
+            <p>© 2024 {{company_name or 'Nuestra Empresa'}}. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .notification-box {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-success { background: #d4edda; color: #155724; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔔 {{title}}</h1>
+        </div>
+        <div class="content">
+            <div class="notification-box">
+                <p><strong>Hola {{name}},</strong></p>
+                <p>{{message}}</p>
+                
+                {% if status %}
+                <p>Estado: <span class="status status-{{status}}">{{status|upper}}</span></p>
+                {% endif %}
+                
+                {% if details %}
+                <h3>Detalles:</h3>
+                <ul>
+                    {% for key, value in details.items() %}
+                    <li><strong>{{key|title}}:</strong> {{value}}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            
+            {% if action_url %}
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{action_url}}" style="background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                    {{action_text or 'Ver Detalles'}}
+                </a>
+            </div>
+            {% endif %}
+            
+            <div class="timestamp">
+                Enviado el {{timestamp}} desde el Microservicio de Notificaciones
+            </div>
+        </div>
+        <div class="footer">
+            <p>Este es un mensaje automático del sistema. No responda a este email.</p>
+        </div>
+    </div>
+</body>
+</html>

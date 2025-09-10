@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .header .icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .content {
+            padding: 40px;
+        }
+        .success-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .user-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .user-info h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .verification-code {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 18px;
+            text-align: center;
+            margin: 20px 0;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon">✅</div>
+            <h1>¡Registro Exitoso!</h1>
+        </div>
+        <div class="content">
+            <div class="success-box">
+                <h2>¡Bienvenido {{name}}!</h2>
+                <p>Tu cuenta ha sido creada exitosamente en {{service_name}}.</p>
+            </div>
+            
+            <div class="user-info">
+                <h3>📋 Información de tu cuenta:</h3>
+                <p><strong>Usuario:</strong> {{username}}</p>
+                <p><strong>Email:</strong> {{email}}</p>
+                <p><strong>Fecha de registro:</strong> {{registration_date}}</p>
+                {% if verification_code %}
+                <p><strong>Código de verificación:</strong></p>
+                <div class="verification-code">{{verification_code}}</div>
+                {% endif %}
+            </div>
+            
+            {% if verification_required %}
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                <h3>⚠️ Verificación Requerida</h3>
+                <p>Para completar tu registro, necesitas verificar tu email haciendo clic en el enlace que te enviamos.</p>
+            </div>
+            {% endif %}
+            
+            {% if next_steps %}
+            <div>
+                <h3>🚀 Próximos pasos:</h3>
+                <ul>
+                    {% for step in next_steps %}
+                    <li>{{step}}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            {% if login_url %}
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{login_url}}" class="cta-button">Iniciar Sesión</a>
+            </div>
+            {% endif %}
+            
+            <div style="background: #e7f3ff; border: 1px solid #b3d9ff; color: #004085; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p><strong>💡 Consejo:</strong> Guarda este email para futuras referencias.</p>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Si no creaste esta cuenta, puedes ignorar este email.</p>
+            <p>© 2024 {{service_name}}. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>

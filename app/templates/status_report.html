@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{subject}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 700px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .status-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-ok { background: #28a745; }
+        .status-warning { background: #ffc107; }
+        .status-error { background: #dc3545; }
+        .status-unknown { background: #6c757d; }
+        
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .metrics-table th,
+        .metrics-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .metrics-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        .chart-placeholder {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            padding: 40px;
+            text-align: center;
+            color: #6c757d;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 {{report_title or 'Reporte de Estado'}}</h1>
+            <p>{{report_period or 'Período del reporte'}}</p>
+        </div>
+        <div class="content">
+            <div class="summary">
+                <h2>📈 Resumen Ejecutivo</h2>
+                <p>{{summary_text or 'Estado general del sistema'}}</p>
+            </div>
+            
+            {% if services_status %}
+            <h3>🔧 Estado de Servicios</h3>
+            <div class="status-grid">
+                {% for service, status in services_status.items() %}
+                <div class="status-item">
+                    <span class="status-indicator status-{{status}}"></span>
+                    <strong>{{service|title}}</strong>
+                    <br>
+                    <small>{{status|upper}}</small>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            {% if metrics %}
+            <h3>📊 Métricas del Sistema</h3>
+            <table class="metrics-table">
+                <thead>
+                    <tr>
+                        <th>Métrica</th>
+                        <th>Valor</th>
+                        <th>Estado</th>
+                        <th>Cambio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for metric in metrics %}
+                    <tr>
+                        <td>{{metric.name}}</td>
+                        <td>{{metric.value}}</td>
+                        <td>
+                            <span class="status-indicator status-{{metric.status}}"></span>
+                            {{metric.status|upper}}
+                        </td>
+                        <td>
+                            {% if metric.change %}
+                                {% if metric.change > 0 %}
+                                    <span style="color: #28a745;">↗ +{{metric.change}}%</span>
+                                {% else %}
+                                    <span style="color: #dc3545;">↘ {{metric.change}}%</span>
+                                {% endif %}
+                            {% else %}
+                                <span style="color: #6c757d;">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+            
+            {% if alerts %}
+            <h3>⚠️ Alertas Recientes</h3>
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                {% for alert in alerts %}
+                <p><strong>{{alert.timestamp}}:</strong> {{alert.message}}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            {% if recommendations %}
+            <h3>💡 Recomendaciones</h3>
+            <div style="background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                <ul>
+                    {% for rec in recommendations %}
+                    <li>{{rec}}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            {% if chart_data %}
+            <h3>📈 Gráfico de Rendimiento</h3>
+            <div class="chart-placeholder">
+                📊 Gráfico de {{chart_data.title or 'Rendimiento'}}
+                <br>
+                <small>Datos: {{chart_data.description or 'Información del período'}}</small>
+            </div>
+            {% endif %}
+            
+            <div class="timestamp">
+                Reporte generado el {{timestamp}} desde el Sistema de Monitoreo
+            </div>
+        </div>
+        <div class="footer">
+            <p>Este es un reporte automático del sistema de monitoreo.</p>
+            <p>© 2024 {{service_name or 'Sistema de Notificaciones'}}. Todos los derechos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>
