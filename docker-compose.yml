@@ -46,6 +46,9 @@ services:
       # Firebase Configuration
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       FIREBASE_SERVICE_ACCOUNT_KEY: ${FIREBASE_SERVICE_ACCOUNT_KEY:-}
+      # Web Push Configuration
+      WEB_VAPID_PUBLIC_KEY: ${WEB_VAPID_PUBLIC_KEY:-}
+      WEB_VAPID_PRIVATE_KEY: ${WEB_VAPID_PRIVATE_KEY:-}
       # JWT Configuration
       SECRET_KEY: ${SECRET_KEY:-tu-secret-key-super-secreta-cambiar-en-produccion}
       ALGORITHM: ${ALGORITHM:-HS256}

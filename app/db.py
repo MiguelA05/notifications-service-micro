@@ -86,19 +86,22 @@ def init_default_channels():
                     name=NotificationChannel.WHATSAPP,
                     enabled=True,
                     config=json.dumps({
-                        'provider': 'twilio',
-                        'account_sid': os.getenv('TWILIO_ACCOUNT_SID'),
-                        'auth_token': os.getenv('TWILIO_AUTH_TOKEN'),
-                        'from_number': os.getenv('TWILIO_WHATSAPP_FROM')
+                        "provider": "twilio",
+                        "account_sid": os.getenv("TWILIO_ACCOUNT_SID", ""),
+                        "auth_token": os.getenv("TWILIO_AUTH_TOKEN", ""),
+                        "from_number": os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+3225035863"),
+                        "webhook_url": os.getenv("WHATSAPP_WEBHOOK_URL", "")
                     })
                 ),
                 NotificationChannelConfig(
                     name=NotificationChannel.PUSH,
                     enabled=True,
                     config=json.dumps({
-                        'provider': 'firebase',
-                        'project_id': os.getenv('FIREBASE_PROJECT_ID'),
-                        'service_account_key': os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY')
+                        "provider": "firebase",
+                        "firebase_project_id": os.getenv("FIREBASE_PROJECT_ID", ""),
+                        "firebase_service_account_key": os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY", ""),
+                        "web_vapid_public_key": os.getenv("WEB_VAPID_PUBLIC_KEY", ""),
+                        "web_vapid_private_key": os.getenv("WEB_VAPID_PRIVATE_KEY", "")
                     })
                 )
             ]
