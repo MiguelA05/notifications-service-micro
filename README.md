@@ -52,35 +52,35 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph Dominio
-        APP[Aplicación de Dominio]
-        DB_APP[(BD Dominio)]
-        APP <--> DB_APP
+        APP[Aplicacion de Dominio];
+        DB_APP[(BD Dominio)];
+        APP <--> DB_APP;
     end
 
     subgraph Orquestador
-        ORCH[Orquestador de Notificaciones]
-        DB_ORCH[(BD Orquestador)]
-        ORCH <--> DB_ORCH
+        ORCH[Orquestador de Notificaciones];
+        DB_ORCH[(BD Orquestador)];
+        ORCH <--> DB_ORCH;
     end
 
     subgraph Delivery
-        API[Servicio de Notificaciones (API)]
-        WRK[Worker de Entrega]
-        SCH[Scheduler]
+        API[Servicio de Notificaciones API];
+        WRK[Worker de Entrega];
+        SCH[Scheduler];
     end
 
-    MQ[(RabbitMQ)]
+    MQ[(RabbitMQ)];
 
-    APP -->|Eventos| ORCH
-    ORCH -->|publica| MQ
-    API -->|/notify| MQ
-    SCH -->|programa| MQ
-    MQ --> WRK
+    APP -->|Eventos| ORCH;
+    ORCH -->|publica| MQ;
+    API -->|/notify| MQ;
+    SCH -->|programa| MQ;
+    MQ --> WRK;
 
-    WRK --> SMTP[SMTP/SendGrid]
-    WRK --> SMS[Twilio SMS]
-    WRK --> WA[Twilio WhatsApp]
-    WRK --> PUSH[FCM/WebPush]
+    WRK --> SMTP[SMTP SendGrid];
+    WRK --> SMS[Twilio SMS];
+    WRK --> WA[Twilio WhatsApp];
+    WRK --> PUSH[FCM WebPush];
 ```
 
 ---
