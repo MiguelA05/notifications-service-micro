@@ -14,14 +14,14 @@ Vista general (diagrama)
 ```mermaid
 flowchart LR
     A[Servicios de Dominio] -->|Eventos| B[Notification Orchestrator]
-    B -->|publica| C[RabbitMQ (vhost: foro)]
-    C -->|notifications.queue| D[MS Notificaciones (worker)]
-    D --> E1[SMTP/SendGrid]
+    B -->|publica| C[RabbitMQ vhost foro]
+    C -->|notifications.queue| D[Delivery Worker]
+    D --> E1[SMTP SendGrid]
     D --> E2[Twilio SMS]
     D --> E3[Twilio WhatsApp]
-    D --> E4[FCM / WebPush]
+    D --> E4[FCM WebPush]
     subgraph API
-        F[FastAPI /notify]
+        F[FastAPI notify]
     end
     F --> C
     subgraph Scheduler
@@ -36,9 +36,9 @@ flowchart TB
     X[notifications.exchange] -->|notifications.key| Q[notifications.queue]
 
     subgraph Retries
-        XR1[exchange.retry.1] --> R1[queue.retry.1 (TTL 5s)]
-        XR2[exchange.retry.2] --> R2[queue.retry.2 (TTL 30s)]
-        XR3[exchange.retry.3] --> R3[queue.retry.3 (TTL 120s)]
+        XR1[exchange.retry.1] --> R1[queue.retry.1 TTL5s]
+        XR2[exchange.retry.2] --> R2[queue.retry.2 TTL30s]
+        XR3[exchange.retry.3] --> R3[queue.retry.3 TTL120s]
     end
 
     subgraph DLQ
