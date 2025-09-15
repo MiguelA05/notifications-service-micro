@@ -62,6 +62,8 @@ MANIFEST
 .env.test
 .env.production
 .env.staging
+.env.*
+*.env
 
 ### Docker ###
 .dockerignore
