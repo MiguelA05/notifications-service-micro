@@ -1,3 +1,4 @@
+from app.channels.factory import create_channel
 from fastapi import FastAPI, Body, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ import asyncio
 from .messaging import publish_message, setup_infrastructure
 from .db import get_db, create_tables, init_default_channels, init_default_user
 from .auth import create_access_token, verify_password, get_user_by_username, verify_token, create_user
-from .models import TokenResponse
+from .models import NotificationChannel, TokenResponse
 
 
 class NotifyPayload(BaseModel):
@@ -85,3 +86,23 @@ async def register(
     # Crear nuevo usuario
     user = create_user(db, username, email, password)
     return {"message": "User created successfully", "user_id": user.id}
+
+@app.post("/webhook/whatsapp")
+async def whatsapp_webhook(request: Request):
+    """
+    Endpoint para recibir webhooks de WhatsApp
+    """
+    try:
+        # Obtener datos del webhook
+        form_data = await request.form()
+        webhook_data = dict(form_data)
+        
+        # Procesar webhook
+        whatsapp_channel = create_channel(NotificationChannel.WHATSAPP)
+        response = await whatsapp_channel.process_webhook(webhook_data)
+        
+        return {"status": "success", "data": response}
+        
+    except Exception as e:
+        logger.error(f"Error procesando webhook de WhatsApp: {str(e)}")
+        return {"status": "error", "message": str(e)}
