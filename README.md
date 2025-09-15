@@ -13,60 +13,37 @@ Arquitectura y relación con otros servicios
 Vista general (diagrama)
 ```mermaid
 flowchart LR
-    A[Servicios de Dominio
-    (Usuarios, Ventas,
-    Envíos...)] -- Eventos --> B[Notification Orchestrator
-    (reglas, plantillas,
-    selección de canal)]
-    B -- publica --> C{{RabbitMQ
-    vhost: foro}}
-    C -->|notifications.queue| D[MS Notificaciones (Delivery)
-    worker.py]
-    D -->|Email| E1[(SMTP/SendGrid)]
-    D -->|SMS| E2[(Twilio SMS)]
-    D -->|WhatsApp| E3[(Twilio WhatsApp)]
-    D -->|Push| E4[(FCM/WebPush)]
+    A[Servicios de Dominio] -->|Eventos| B[Notification Orchestrator]
+    B -->|publica| C[RabbitMQ (vhost: foro)]
+    C -->|notifications.queue| D[MS Notificaciones (worker)]
+    D --> E1[SMTP/SendGrid]
+    D --> E2[Twilio SMS]
+    D --> E3[Twilio WhatsApp]
+    D --> E4[FCM / WebPush]
     subgraph API
-      F[FastAPI /notify,/login]
+        F[FastAPI /notify]
     end
-    F -- publica --> C
+    F --> C
     subgraph Scheduler
-      G[APScheduler]
+        G[APScheduler]
     end
-    G -- publica (programado) --> C
+    G -->|publica programado| C
 ```
 
 Topología de RabbitMQ (simplificada)
 ```mermaid
 flowchart TB
-  subgraph Principal
-    X[notifications.exchange\n(direct)]
-    Q[notifications.queue\n(durable)\nDLX-> notifications.exchange.dlx]
-    X -- notifications.key --> Q
-  end
+    X[notifications.exchange] -->|notifications.key| Q[notifications.queue]
 
-  subgraph Retries
-    R1[queue.retry.1\nTTL=5s\nDLX-> notifications.exchange]
-    R2[queue.retry.2\nTTL=30s\nDLX-> notifications.exchange]
-    R3[queue.retry.3\nTTL=120s\nDLX-> notifications.exchange]
-    XR1[exchange.retry.1]
-    XR2[exchange.retry.2]
-    XR3[exchange.retry.3]
-    XR1 --> R1
-    XR2 --> R2
-    XR3 --> R3
-  end
+    subgraph Retries
+        XR1[exchange.retry.1] --> R1[queue.retry.1 (TTL 5s)]
+        XR2[exchange.retry.2] --> R2[queue.retry.2 (TTL 30s)]
+        XR3[exchange.retry.3] --> R3[queue.retry.3 (TTL 120s)]
+    end
 
-  subgraph DLQ
-    DLX[notifications.exchange.dlx\n(fanout)]
-    DLQ[notifications.queue.dlq]
-    DLX --> DLQ
-  end
-
-  style X fill:#eef,stroke:#88f
-  style Q fill:#efe,stroke:#5a5
-  style DLX fill:#fee,stroke:#f88
-  style DLQ fill:#fee,stroke:#f88
+    subgraph DLQ
+        DLX[notifications.exchange.dlx] --> DLQ[notifications.queue.dlq]
+    end
 ```
 
 RabbitMQ (vhost foro)
@@ -201,5 +178,99 @@ Glosario
 
 Mantenimiento de este README
 - Si se modifica la infraestructura (topología, variables, servicios o permisos), actualiza aquí los cambios.
+
+Contratos de datos entre microservicios (mensajes y ejemplo práctico)
+1) Evento desde un Servicio de Dominio → Orquestador
+- El dominio envía información “de intención” (qué pasó y a quién), NO un mensaje listo para enviar.
+```json
+{
+  "event_id": "evt_1a2b3c",
+  "event_type": "user.welcome",
+  "user": {
+    "id": 123,
+    "email": "ana@example.com",
+    "phone_e164": "+573001112233",
+    "whatsapp_e164": "+573001112233",
+    "push_token": "fcm_device_token"
+  },
+  "template": "welcome",
+  "params": {"first_name": "Ana"},
+  "preferred_channels": ["email", "push"],
+  "schedule_at": null,
+  "metadata": {"source": "app-web"}
+}
+```
+
+2) Mensaje del Orquestador → RabbitMQ (consumido por este servicio)
+- El orquestador “construye” el mensaje listo para entrega: selecciona canal, resuelve plantillas y datos.
+```json
+{
+  "channel": "email",
+  "destination": "ana@example.com",
+  "subject": "¡Bienvenida, Ana!",
+  "message": "Hola Ana, gracias por registrarte.",
+  "data": {
+    "template": "welcome",
+    "variables": {"first_name": "Ana"}
+  },
+  "metadata": {
+    "event_id": "evt_1a2b3c",
+    "event_type": "user.welcome",
+    "trace_id": "tr_9x8y7z"
+  }
+}
+```
+
+Variantes por canal (payload esperado por el Delivery)
+- email:
+```json
+{"channel":"email","destination":"ana@example.com","subject":"Asunto","message":"Cuerpo"}
+```
+- sms:
+```json
+{"channel":"sms","destination":"+573001112233","message":"Texto corto"}
+```
+- whatsapp:
+```json
+{"channel":"whatsapp","destination":"+573001112233","message":"Texto WA"}
+```
+- push:
+```json
+{"channel":"push","destination":"fcm_device_token","subject":"Título","message":"Body"}
+```
+
+Ejemplo práctico (user.welcome)
+1) Dominio emite el evento (intención): ver ejemplo 1.
+2) Orquestador aplica reglas:
+   - Elige canal “email” si existe email válido; como fallback, “push”.
+   - Resuelve plantilla "welcome" con {first_name:"Ana"} → subject y body renderizados.
+   - Publica a RabbitMQ (exchange notifications.exchange, routing key notifications.key) el payload del ejemplo 2.
+3) Este Delivery consume de notifications.queue y envía por el canal indicado.
+
+Diagrama de secuencia (resumen)
+```mermaid
+sequenceDiagram
+    participant D as Dominio
+    participant O as Orchestrator
+    participant MQ as RabbitMQ
+    participant W as Delivery-Worker
+    participant P as Proveedor (Email/SMS/Push/WA)
+
+    D->>O: Evento {event_type, user, template, params}
+    O->>O: Reglas + Plantillas + Selección de canal
+    O->>MQ: Publish {channel, destination, subject, message, data}
+    W->>MQ: Consume notifications.queue
+    W->>P: Enviar por canal (proveedor)
+    P-->>W: Respuesta OK/Fail
+    alt fallo temporal
+        W->>MQ: Reencola en retry.{1..3}
+    else fallo definitivo
+        W->>MQ: Envía a DLQ
+    end
+```
+
+Validaciones mínimas que hace el Delivery
+- Requiere `channel` válido y `destination` con formato del canal (email válido, E.164 para SMS/WA, token para push).
+- Si faltan campos o el proveedor responde error no recuperable, el mensaje terminará en DLQ tras reintentos.
 
 
