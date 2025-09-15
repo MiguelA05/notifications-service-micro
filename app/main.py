@@ -1,13 +1,21 @@
 from app.channels.factory import create_channel
-from fastapi import FastAPI, Body, HTTPException, Depends
+from fastapi import FastAPI, Body, HTTPException, Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import asyncio
+import logging
 
 from .messaging import publish_message, setup_infrastructure
 from .db import get_db, create_tables, init_default_channels, init_default_user
-from .auth import create_access_token, verify_password, get_user_by_username, verify_token, create_user
+from .auth import (
+    create_access_token,
+    verify_password,
+    get_user_by_username,
+    get_user_by_email,
+    verify_token,
+    create_user,
+)
 from .models import NotificationChannel, TokenResponse
 
 
@@ -17,6 +25,7 @@ class NotifyPayload(BaseModel):
 
 
 app = FastAPI(title="notifications-service-micro", version="1.0.0")
+logger = logging.getLogger(__name__)
 
 
 @app.on_event("startup")
