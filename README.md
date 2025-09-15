@@ -1,16 +1,18 @@
-Notifications Service Micro (Python/FastAPI)
+## Notifications Service Micro (Python/FastAPI)
 
-Descripción general
+### Descripción general
 - Microservicio de “Delivery” de notificaciones. Recibe eventos por RabbitMQ y envía por Email/SMS/WhatsApp/Push.
 - Pensado para convivir con un Orquestador de Notificaciones (otro servicio) y con los Microservicios de Dominio (usuarios, ventas, etc.).
 - Infraestructura lista para producción mínima: Docker Compose, PostgreSQL, RabbitMQ, autenticación JWT, reintentos y DLQ, y un Scheduler para envíos programados.
 
-Arquitectura y relación con otros servicios
+---
+
+## Arquitectura y relación con otros servicios
 - Servicios de Dominio: publican eventos al Orquestador.
 - Orchestrator (servicio aparte): aplica reglas, elige canal y publica al exchange de notificaciones en RabbitMQ.
 - Este proyecto (Delivery): consume la cola de notificaciones y realiza el envío real a los proveedores.
 
-Vista general (diagrama)
+### Vista general (diagrama)
 ```mermaid
 flowchart LR
     A[Servicios de Dominio] -->|Eventos| B[Notification Orchestrator]
@@ -30,7 +32,7 @@ flowchart LR
     G -->|publica programado| C
 ```
 
-Topología de RabbitMQ (simplificada)
+### Topología de RabbitMQ (simplificada)
 ```mermaid
 flowchart TB
     X[notifications.exchange] -->|notifications.key| Q[notifications.queue]
@@ -46,7 +48,58 @@ flowchart TB
     end
 ```
 
-RabbitMQ (vhost foro)
+### Diagrama general de la plataforma (con BDs)
+```mermaid
+flowchart LR
+    subgraph Dominio
+        APP[Aplicación de Dominio]
+        DB_APP[(BD Dominio)]
+        APP <--> DB_APP
+    end
+
+    subgraph Orquestador
+        ORCH[Orquestador de Notificaciones]
+        DB_ORCH[(BD Orquestador)]
+        ORCH <--> DB_ORCH
+    end
+
+    subgraph Delivery
+        API[Servicio de Notificaciones (API)]
+        WRK[Worker de Entrega]
+        SCH[Scheduler]
+    end
+
+    MQ[(RabbitMQ)]
+
+    APP -->|Eventos| ORCH
+    ORCH -->|publica| MQ
+    API -->|/notify| MQ
+    SCH -->|programa| MQ
+    MQ --> WRK
+
+    WRK --> SMTP[SMTP/SendGrid]
+    WRK --> SMS[Twilio SMS]
+    WRK --> WA[Twilio WhatsApp]
+    WRK --> PUSH[FCM/WebPush]
+```
+
+---
+
+## RabbitMQ (vhost foro)
+
+#### Notas de persistencia por componente
+- BD Dominio:
+  - Datos de negocio (usuarios, pedidos, etc.).
+  - Fuente de verdad para la Aplicación de Dominio y autenticación externa si aplica.
+- BD Orquestador:
+  - Reglas de orquestación, plantillas base, preferencias/opt‑in por usuario, historial de orquestaciones y correlación de eventos.
+  - Útil para trazabilidad entre evento de negocio y mensajes construidos (trace_id, event_id).
+- BD del Servicio de Notificaciones (Delivery):
+  - `NotificationChannelConfig`: credenciales y parámetros por canal (SMTP/Twilio/FCM, etc.).
+  - `Notification`: registro mínimo de envíos (opcional si lo requiere auditoría).
+  - `NotificationMetrics`: agregados simples para monitoreo.
+  - `User`: soporte de autenticación JWT del propio servicio (login/register de pruebas).
+  - Este servicio no almacena plantillas fuertes ni reglas; recibe el mensaje ya construido desde el Orquestador.
 - Usuarios (ejemplo de roles en este stack local):
   - orchestrator_user/orch_pass: permisos totales en vhost foro.
   - notifications_user/notif_pass: permisos sobre recursos notifications.* (exchanges y colas).
@@ -56,7 +109,9 @@ RabbitMQ (vhost foro)
   - Exchange DLX: notifications.exchange.dlx (fanout) → Cola DLQ: notifications.queue.dlq
   - Retries con backoff: exchanges notifications.exchange.retry.{1..3} y colas notifications.queue.retry.{1..3} con TTLs crecientes y dead-letter de vuelta al exchange principal.
 
-Componentes del proyecto (carpeta app/)
+---
+
+## Componentes del proyecto (carpeta app/)
 - main.py: API FastAPI.
   - /health: healthcheck.
   - /notify: publica un payload en RabbitMQ.
@@ -75,7 +130,9 @@ Componentes del proyecto (carpeta app/)
 - auth.py: utilidades de JWT y hashing de contraseñas (passlib/python-jose).
 - templates/: plantillas Jinja2 para correos.
 
-Flujos principales
+---
+
+## Flujos principales
 1) Envío estándar (end-to-end):
    - Cliente/Orchestrator publica un evento con canal/destino/mensaje en notifications.exchange (routing key notifications.key).
    - Este servicio lo publica vía API (/notify) o el Orchestrator lo publica directamente.
@@ -86,7 +143,9 @@ Flujos principales
    - scheduler.py agenda un job (ejemplo demo) y, al llegar la hora, publica el payload en RabbitMQ.
    - El worker procesa el mensaje como en el flujo normal.
 
-Variables de entorno (archivo .env)
+---
+
+## Variables de entorno (archivo .env)
 RabbitMQ
 - RABBITMQ_HOST=rabbitmq
 - RABBITMQ_PORT=5672
@@ -123,7 +182,9 @@ Worker (reintentos)
 Scheduler (demo)
 - SCHEDULER_DEMO_CHANNEL, SCHEDULER_DEMO_DESTINATION, SCHEDULER_DEMO_DELAY_SEC
 
-Ejecución (Docker Compose)
+---
+
+## Ejecución (Docker Compose)
 1) docker compose build --no-cache
 2) docker compose up -d
 3) Verificar estado:
@@ -134,7 +195,9 @@ Ejecución (Docker Compose)
    - Worker: docker logs notifications-worker --since=1m
    - Scheduler: docker logs notifications-scheduler --since=1m
 
-Pruebas rápidas
+---
+
+## Pruebas rápidas
 Healthcheck
 - curl http://localhost:8080/health → {"status":"ok"}
 
@@ -142,17 +205,23 @@ Publicar un mensaje (ejemplo push)
 - docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"push","destination":"<TOKEN>","subject":"Hola","message":"Prueba"}'
 - Monitorear worker: docker logs -f notifications-worker
 
-Notas de seguridad
+---
+
+## Notas de seguridad
 - No publiques el JSON de la service account de Firebase.
 - Aísla usuarios y permisos por vhost; en producción, separa aún más los roles y usa TLS si es necesario.
 
-Guía de extensibilidad (añadir un canal nuevo)
+---
+
+## Guía de extensibilidad (añadir un canal nuevo)
 1) Crear app/channels/<nuevo>.py implementando Channel.
 2) Registrar en app/channels/factory.py.
 3) Añadir config por defecto en db.init_default_channels si aplica.
 4) Documentar nuevas variables en este README.
 
-Solución de problemas (FAQ)
+---
+
+## Solución de problemas (FAQ)
 - ACCESS_REFUSED (RabbitMQ):
   - Verifica usuario, contraseña, vhost y permisos. Este servicio usa notifications_user/notif_pass en el vhost foro.
 - PRECONDITION_FAILED (inequivalent arg x-dead-letter-exchange):
@@ -162,7 +231,9 @@ Solución de problemas (FAQ)
 - Template Jinja2 no encontrado:
   - Verifica rutas y que templates/ esté copiado al contenedor.
 
-Glosario
+---
+
+## Glosario
 - Exchange: Punto de distribución donde se publican mensajes en RabbitMQ.
 - Queue (Cola): Buzón del que consumen los workers.
 - Routing Key: Etiqueta usada por el exchange para direccionar mensajes.
@@ -176,11 +247,15 @@ Glosario
 - APScheduler: Librería para programar tareas/asignar triggers (DateTrigger, intervalos, cron, etc.).
 - JWT: Token de autenticación para proteger endpoints.
 
-Mantenimiento de este README
+---
+
+## Mantenimiento de este README
 - Si se modifica la infraestructura (topología, variables, servicios o permisos), actualiza aquí los cambios.
 
-Contratos de datos entre microservicios (mensajes y ejemplo práctico)
-1) Evento desde un Servicio de Dominio → Orquestador
+---
+
+## Contratos de datos entre microservicios (mensajes y ejemplo práctico)
+### 1) Evento desde un Servicio de Dominio → Orquestador
 - El dominio envía información “de intención” (qué pasó y a quién), NO un mensaje listo para enviar.
 ```json
 {
@@ -201,7 +276,7 @@ Contratos de datos entre microservicios (mensajes y ejemplo práctico)
 }
 ```
 
-2) Mensaje del Orquestador → RabbitMQ (consumido por este servicio)
+### 2) Mensaje del Orquestador → RabbitMQ (consumido por este servicio)
 - El orquestador “construye” el mensaje listo para entrega: selecciona canal, resuelve plantillas y datos.
 ```json
 {
@@ -221,7 +296,7 @@ Contratos de datos entre microservicios (mensajes y ejemplo práctico)
 }
 ```
 
-Variantes por canal (payload esperado por el Delivery)
+### Variantes por canal (payload esperado por el Delivery)
 - email:
 ```json
 {"channel":"email","destination":"ana@example.com","subject":"Asunto","message":"Cuerpo"}
@@ -239,7 +314,7 @@ Variantes por canal (payload esperado por el Delivery)
 {"channel":"push","destination":"fcm_device_token","subject":"Título","message":"Body"}
 ```
 
-Ejemplo práctico (user.welcome)
+### Ejemplo práctico (user.welcome)
 1) Dominio emite el evento (intención): ver ejemplo 1.
 2) Orquestador aplica reglas:
    - Elige canal “email” si existe email válido; como fallback, “push”.
@@ -247,7 +322,7 @@ Ejemplo práctico (user.welcome)
    - Publica a RabbitMQ (exchange notifications.exchange, routing key notifications.key) el payload del ejemplo 2.
 3) Este Delivery consume de notifications.queue y envía por el canal indicado.
 
-Diagrama de secuencia (resumen)
+### Diagrama de secuencia (resumen)
 ```mermaid
 sequenceDiagram
     participant D as Dominio
@@ -269,7 +344,7 @@ sequenceDiagram
     end
 ```
 
-Validaciones mínimas que hace el Delivery
+### Validaciones mínimas que hace el Delivery
 - Requiere `channel` válido y `destination` con formato del canal (email válido, E.164 para SMS/WA, token para push).
 - Si faltan campos o el proveedor responde error no recuperable, el mensaje terminará en DLQ tras reintentos.
 
