@@ -41,8 +41,8 @@ flowchart TB
         XR3[exchange.retry.3] --> R3[queue.retry.3 TTL120s]
     end
 
-    subgraph DLQ
-        DLX[notifications.exchange.dlx] --> DLQ[notifications.queue.dlq]
+    subgraph DeadLetter
+        DLX_EX[notifications.exchange.dlx] --> DLQ_Q[notifications.queue.dlq]
     end
 ```
 
