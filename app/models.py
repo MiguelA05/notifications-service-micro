@@ -16,6 +16,7 @@ class NotificationStatus(str, enum.Enum):
     SENT = "sent"
     FAILED = "failed"
     SCHEDULED = "scheduled"
+    CANCELLED = "cancelled"
 
 #Enum para los canales de notificacion (Debemos establecer si vamos a usar uno en especifico o varios)
 class NotificationChannel(str, enum.Enum):

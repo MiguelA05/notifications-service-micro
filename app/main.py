@@ -1,5 +1,5 @@
 from app.channels.factory import create_channel
-from fastapi import FastAPI, Body, HTTPException, Depends, Request
+from fastapi import FastAPI, Body, HTTPException, Depends, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from .auth import (
     create_user,
 )
 from .models import NotificationChannel, TokenResponse
+from .schemas import NotificationFilter, NotificationCreate
+from .crud import list_channels, list_notifications, get_notification, create_notification, get_metrics, list_schedules, get_schedule, cancel_schedule
 
 
 class NotifyPayload(BaseModel):
@@ -59,6 +61,90 @@ async def send_notification(payload: NotifyPayload, user_id: str = Depends(verif
         return {"status": "ok", "sent_by": user_id, "queued": True}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# FASE 5 - Endpoints de consulta y gestión
+
+@app.get("/channels")
+def api_list_channels(db: Session = Depends(get_db)):
+    return list_channels(db)
+
+
+@app.get("/notifications")
+def api_list_notifications(
+    channel: str | None = Query(None),
+    status: str | None = Query(None),
+    q: str | None = Query(None),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    try:
+        nf = NotificationFilter(
+            channel=channel,
+            status=status,
+            q=q,
+            since=since,
+            until=until,
+            page=page,
+            size=size,
+        )
+        return list_notifications(db, nf)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/notifications/{notification_id}")
+def api_get_notification(notification_id: int, db: Session = Depends(get_db)):
+    item = get_notification(db, notification_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return item
+
+
+@app.post("/notifications/schedule")
+async def api_schedule_notification(payload: NotificationCreate = Body(...), db: Session = Depends(get_db)):
+    try:
+        created = await asyncio.to_thread(create_notification, db, payload)
+        # Publicación inmediata si no hay schedule_at
+        if payload.schedule_at is None:
+            await publish_message(routing_key="notifications.key", payload=payload.model_dump())
+        else:
+            # En un caso real, usaríamos el scheduler para planificar la publicación
+            pass
+        return created
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/metrics")
+def api_metrics(db: Session = Depends(get_db)):
+    return get_metrics(db)
+
+
+# Schedules persistentes
+
+@app.get("/schedules")
+def api_list_schedules(page: int = Query(1, ge=1), size: int = Query(20, ge=1, le=200), db: Session = Depends(get_db)):
+    return list_schedules(db, page=page, size=size)
+
+
+@app.get("/schedules/{schedule_id}")
+def api_get_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    item = get_schedule(db, schedule_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return item
+
+
+@app.delete("/schedules/{schedule_id}")
+def api_cancel_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    ok = cancel_schedule(db, schedule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Schedule not found or not cancellable")
+    return {"cancelled": True}
 
 @app.post("/login", response_model=TokenResponse)
 async def login(
