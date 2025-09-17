@@ -26,7 +26,7 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -73,7 +73,7 @@ async def schedule_once(run_at: datetime, payload: Dict[str, Any]) -> None:
         # Trabajo que se ejecutará en la fecha indicada
         await _publish(payload)
 
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(timezone=timezone.utc)
     scheduler.start()
     scheduler.add_job(job, DateTrigger(run_date=run_at))
     logger.info(f"Notificación agendada para {run_at.isoformat()}")
@@ -84,7 +84,7 @@ async def schedule_once(run_at: datetime, payload: Dict[str, Any]) -> None:
 
 async def demo() -> None:
     # Ejemplo: programa una notificación 30s en el futuro (o el valor que definas)
-    future_time = datetime.utcnow() + timedelta(seconds=int(os.getenv("SCHEDULER_DEMO_DELAY_SEC", "30")))
+    future_time = datetime.now(timezone.utc) + timedelta(seconds=int(os.getenv("SCHEDULER_DEMO_DELAY_SEC", "30")))
     payload = {
         "channel": os.getenv("SCHEDULER_DEMO_CHANNEL", "email"),
         "destination": os.getenv("SCHEDULER_DEMO_DESTINATION", "test@example.com"),
