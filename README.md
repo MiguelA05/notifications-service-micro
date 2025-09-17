@@ -83,6 +83,65 @@ flowchart LR
     WRK --> PUSH[FCM WebPush];
 ```
 
+### Flujo completo de microservicios (interacciones detalladas)
+```mermaid
+sequenceDiagram
+    participant U as Usuario/Cliente
+    participant D as Servicio Dominio
+    participant O as Orquestador
+    participant MQ as RabbitMQ
+    participant API as API Notificaciones
+    participant W as Worker
+    participant S as Scheduler
+    participant P as Proveedores Externos
+
+    Note over U,P: Flujo 1: Notificación inmediata
+    U->>D: Acción del usuario (registro, compra, etc.)
+    D->>D: Procesa lógica de negocio
+    D->>O: Evento: {event_type, user, template, params}
+    O->>O: Aplica reglas de orquestación
+    O->>O: Selecciona canal y resuelve plantilla
+    O->>MQ: Publica mensaje listo para envío
+    MQ->>W: Consume de notifications.queue
+    W->>W: Identifica canal (email/sms/whatsapp/push)
+    W->>P: Envía notificación al proveedor
+    P-->>W: Respuesta (éxito/fallo)
+    
+    alt Fallo temporal
+        W->>MQ: Reencola en retry.1 (5s)
+        MQ->>W: Reintenta después de 5s
+        W->>P: Reintenta envío
+    else Fallo persistente
+        W->>MQ: Envía a DLQ
+    end
+
+    Note over U,P: Flujo 2: Notificación programada
+    U->>API: POST /notifications/schedule
+    API->>API: Valida y almacena en BD
+    API->>S: Programa tarea para fecha futura
+    S->>S: Espera hasta fecha programada
+    S->>MQ: Publica mensaje cuando llega la hora
+    MQ->>W: Procesa como flujo normal
+
+    Note over U,P: Flujo 3: Consulta y gestión
+    U->>API: GET /notifications (con filtros)
+    API->>API: Consulta BD con filtros/paginación
+    API-->>U: Lista de notificaciones
+    
+    U->>API: GET /schedules
+    API->>API: Consulta schedules pendientes
+    API-->>U: Lista de schedules programados
+    
+    U->>API: DELETE /schedules/{id}
+    API->>API: Cancela schedule pendiente
+    API-->>U: Confirmación de cancelación
+
+    Note over U,P: Flujo 4: Webhooks y respuestas
+    P->>API: Webhook (WhatsApp, SMS status)
+    API->>API: Procesa respuesta del proveedor
+    API->>API: Actualiza estado en BD
+```
+
 ---
 
 ## RabbitMQ (vhost foro)
