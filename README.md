@@ -212,8 +212,10 @@ RabbitMQ
 - RABBITMQ_USERNAME=notifications_user
 - RABBITMQ_PASSWORD=notif_pass
 - AMQP_EXCHANGE=notifications.exchange
+- AMQP_EXCHANGE_TYPE=direct   # Cambiar a "topic" si usas orquestador.events
 - AMQP_QUEUE=notifications.queue
 - AMQP_ROUTING_KEY=notifications.key
+- MESSAGING_DECLARE_INFRA=true # false si el broker ya trae la topología
 
 JWT
 - SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -237,6 +239,7 @@ Worker (reintentos)
 - WORKER_RETRY_DELAY_2=30
 - WORKER_RETRY_DELAY_3=120
 - DEFAULT_CHANNEL=email
+- WORKER_DECLARE_INFRA=true # false si el broker ya trae la topología
 
 Scheduler (demo)
 - SCHEDULER_DEMO_CHANNEL, SCHEDULER_DEMO_DESTINATION, SCHEDULER_DEMO_DELAY_SEC

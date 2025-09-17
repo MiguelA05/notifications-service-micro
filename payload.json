@@ -1,0 +1,6 @@
+{
+  "channel": "email",
+  "destination": "miraortega2020@gmail.com",
+  "subject": "Hola",
+  "message": "Prueba orquestador.events"
+}

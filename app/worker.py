@@ -52,8 +52,12 @@ RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "admin")
 RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "foro")
 
 EXCHANGE_NAME = os.getenv("AMQP_EXCHANGE", "notifications.exchange")
+EXCHANGE_TYPE = os.getenv("AMQP_EXCHANGE_TYPE", "direct").lower()
 QUEUE_NAME = os.getenv("AMQP_QUEUE", "notifications.queue")
 ROUTING_KEY = os.getenv("AMQP_ROUTING_KEY", "notifications.key")
+DECLARE_INFRA = os.getenv("WORKER_DECLARE_INFRA", "true").lower() == "true"
+DLX_NAME = os.getenv("AMQP_DLX_NAME", f"{EXCHANGE_NAME}.dlx")
+DLX_TYPE = os.getenv("AMQP_DLX_TYPE", "fanout").lower()
 
 # Retries
 MAX_RETRIES = int(os.getenv("WORKER_MAX_RETRIES", "3"))
@@ -80,8 +84,13 @@ def _parse_channel(channel_value: Optional[str]) -> NotificationChannel:
 
 async def _declare_topology(channel: aio_pika.Channel) -> None:
     # Declara exchanges/colas necesarios (principal, reintentos y DLQ)
+    ex_type = {
+        "direct": aio_pika.ExchangeType.DIRECT,
+        "topic": aio_pika.ExchangeType.TOPIC,
+        "fanout": aio_pika.ExchangeType.FANOUT,
+    }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
     # 1) Exchange principal donde se publican mensajes normales
-    exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+    exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
 
     # 2) DLX/DLQ para fallos definitivos (tras agotar reintentos)
     dlx = await channel.declare_exchange(f"{EXCHANGE_NAME}.dlx", aio_pika.ExchangeType.FANOUT, durable=True)
@@ -119,9 +128,28 @@ async def _connect() -> aio_pika.RobustConnection:
     return await aio_pika.connect_robust(url)
 
 async def _publish_to_retry(channel: aio_pika.Channel, retry_index: int, payload: Dict[str, Any], headers: Dict[str, Any]) -> None:
-    # Publica el mensaje en el exchange de reintento con su TTL
-    retry_exchange_name = f"{EXCHANGE_NAME}.retry.{retry_index}"
-    exchange = await channel.declare_exchange(retry_exchange_name, aio_pika.ExchangeType.DIRECT, durable=True)
+    # Con infraestructura completa: usar colas de retry con TTL
+    if DECLARE_INFRA:
+        retry_exchange_name = f"{EXCHANGE_NAME}.retry.{retry_index}"
+        exchange = await channel.declare_exchange(retry_exchange_name, aio_pika.ExchangeType.DIRECT, durable=True)
+        body = json.dumps(payload).encode("utf-8")
+        msg = aio_pika.Message(
+            body=body,
+            content_type="application/json",
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            headers=headers,
+        )
+        await exchange.publish(msg, routing_key=ROUTING_KEY)
+        return
+    # Modo compatibilidad: espera en el worker y republica al exchange principal
+    retry_delay = RETRY_DELAYS[max(0, retry_index - 1)]
+    await asyncio.sleep(retry_delay)
+    ex_type = {
+        "direct": aio_pika.ExchangeType.DIRECT,
+        "topic": aio_pika.ExchangeType.TOPIC,
+        "fanout": aio_pika.ExchangeType.FANOUT,
+    }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
+    main_exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
     body = json.dumps(payload).encode("utf-8")
     msg = aio_pika.Message(
         body=body,
@@ -129,11 +157,16 @@ async def _publish_to_retry(channel: aio_pika.Channel, retry_index: int, payload
         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         headers=headers,
     )
-    await exchange.publish(msg, routing_key=ROUTING_KEY)
+    await main_exchange.publish(msg, routing_key=ROUTING_KEY)
 
 async def _publish_to_dlq(channel: aio_pika.Channel, payload: Dict[str, Any], headers: Dict[str, Any]) -> None:
-    # Envía el mensaje definitivamente fallido a la DLQ
-    dlx = await channel.declare_exchange(f"{EXCHANGE_NAME}.dlx", aio_pika.ExchangeType.FANOUT, durable=True)
+    # Envía el mensaje definitivamente fallido a la DLQ (nombre/tipo configurables)
+    dlx_type = {
+        "fanout": aio_pika.ExchangeType.FANOUT,
+        "topic": aio_pika.ExchangeType.TOPIC,
+        "direct": aio_pika.ExchangeType.DIRECT,
+    }.get(DLX_TYPE, aio_pika.ExchangeType.FANOUT)
+    dlx = await channel.declare_exchange(DLX_NAME, dlx_type, durable=True)
     body = json.dumps(payload).encode("utf-8")
     msg = aio_pika.Message(
         body=body,
@@ -141,7 +174,8 @@ async def _publish_to_dlq(channel: aio_pika.Channel, payload: Dict[str, Any], he
         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         headers=headers,
     )
-    await dlx.publish(msg, routing_key="")
+    routing = "" if dlx_type == aio_pika.ExchangeType.FANOUT else ROUTING_KEY
+    await dlx.publish(msg, routing_key=routing)
 
 async def _process_one(payload: Dict[str, Any]) -> None:
     """Procesa un único mensaje.
@@ -168,7 +202,8 @@ async def main() -> None:
     async with connection:
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=10)
-        await _declare_topology(channel)
+        if DECLARE_INFRA:
+            await _declare_topology(channel)
 
         # Usamos get_queue para no redeclarar con argumentos diferentes
         queue = await channel.get_queue(QUEUE_NAME)

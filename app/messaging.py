@@ -13,8 +13,10 @@ RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "admin")
 RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "foro")
 
 EXCHANGE_NAME = os.getenv("AMQP_EXCHANGE", "notifications.exchange")
+EXCHANGE_TYPE = os.getenv("AMQP_EXCHANGE_TYPE", "direct").lower()  # "direct" | "topic" | "fanout"
 QUEUE_NAME = os.getenv("AMQP_QUEUE", "notifications.queue")
 ROUTING_KEY = os.getenv("AMQP_ROUTING_KEY", "notifications.key")
+DECLARE_INFRA = os.getenv("MESSAGING_DECLARE_INFRA", "true").lower() == "true"
 
 
 @asynccontextmanager
@@ -31,16 +33,23 @@ async def _connection_channel():
 
 
 async def setup_infrastructure() -> None:
+    if not DECLARE_INFRA:
+        return
     async with _connection_channel() as channel:
-        # Exchange principal
-        exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+        # Exchange principal (tipo configurable)
+        ex_type = {
+            "direct": aio_pika.ExchangeType.DIRECT,
+            "topic": aio_pika.ExchangeType.TOPIC,
+            "fanout": aio_pika.ExchangeType.FANOUT,
+        }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
+        exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
 
-        # DLX/DLQ para fallos definitivos (debe coincidir con worker)
+        # DLX/DLQ para fallos definitivos (coincidirá con worker si se declara)
         dlx = await channel.declare_exchange(f"{EXCHANGE_NAME}.dlx", aio_pika.ExchangeType.FANOUT, durable=True)
         dlq = await channel.declare_queue(f"{QUEUE_NAME}.dlq", durable=True)
         await dlq.bind(dlx)
 
-        # Cola principal con dead-letter exchange configurado (coincide con worker)
+        # Cola principal con dead-letter exchange configurado
         queue = await channel.declare_queue(
             QUEUE_NAME,
             durable=True,
@@ -53,7 +62,13 @@ async def setup_infrastructure() -> None:
 
 async def publish_message(routing_key: str, payload: dict) -> None:
     async with _connection_channel() as channel:
-        exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+        # No forzamos declaración si el exchange ya existe. Si se declara, respetamos el tipo configurado.
+        ex_type = {
+            "direct": aio_pika.ExchangeType.DIRECT,
+            "topic": aio_pika.ExchangeType.TOPIC,
+            "fanout": aio_pika.ExchangeType.FANOUT,
+        }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
+        exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
         body = json.dumps(payload).encode("utf-8")
         message = aio_pika.Message(body=body, content_type="application/json", delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
         await exchange.publish(message, routing_key=routing_key)

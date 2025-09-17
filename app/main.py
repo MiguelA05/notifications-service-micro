@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import asyncio
 import logging
+import os
 
 from .messaging import publish_message, setup_infrastructure
 from .db import get_db, create_tables, init_default_channels, init_default_user
@@ -36,8 +37,9 @@ async def on_startup() -> None:
     await asyncio.to_thread(create_tables)
     await asyncio.to_thread(init_default_channels)
     await asyncio.to_thread(init_default_user)
-    # Inicializar infraestructura de mensajería (RabbitMQ)
-    await setup_infrastructure()
+    # Inicializar infraestructura de mensajería (RabbitMQ) solo si es necesario
+    if os.getenv("MESSAGING_DECLARE_INFRA", "true").lower() == "true":
+        await setup_infrastructure()
 
 
 @app.get("/health")
