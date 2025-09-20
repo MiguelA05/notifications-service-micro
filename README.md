@@ -267,6 +267,17 @@ Publicar un mensaje (ejemplo push)
 - docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"push","destination":"<TOKEN>","subject":"Hola","message":"Prueba"}'
 - Monitorear worker: docker logs -f notifications-worker
 
+### Manejo de Mensajes HTML vs Texto
+
+El sistema ahora soporta mensajes específicos por canal:
+
+- **Email**: Recibe contenido HTML que se renderiza directamente
+- **SMS**: Recibe texto plano (sin HTML)
+- **WhatsApp**: Recibe texto plano con soporte para emojis y saltos de línea
+- **Push**: Recibe texto plano
+
+Los templates HTML son manejados por el orquestador, no por este servicio.
+
 ### Nuevos endpoints multi-canal
 
 **POST /notify-multi** - Envío a múltiples canales (sin autenticación)
@@ -279,7 +290,11 @@ curl -X POST "http://localhost:8080/notify-multi" \
       "sms": "+573225035863",
       "whatsapp": "+573225035863"
     },
-    "message": "¡Hola Juan! Mensaje de prueba.",
+    "message": {
+      "email": "<html><body><h1>¡Hola Juan!</h1><p>Mensaje HTML para email</p></body></html>",
+      "sms": "¡Hola Juan! Mensaje de texto para SMS",
+      "whatsapp": "¡Hola Juan! 👋\n\nMensaje de texto para WhatsApp"
+    },
     "subject": "Mensaje de prueba",
     "metadata": {
       "tenantId": "acme",
@@ -304,7 +319,10 @@ curl -X POST "http://localhost:8080/notify-multi-auth" \
       "email": "juan@example.com",
       "sms": "+573225035863"
     },
-    "message": "Mensaje autenticado",
+    "message": {
+      "email": "<html><body><h1>Mensaje importante</h1><p>Contenido HTML autenticado</p></body></html>",
+      "sms": "Mensaje importante - Contenido texto autenticado"
+    },
     "subject": "Mensaje importante"
   }'
 ```
@@ -392,7 +410,12 @@ curl -X POST "http://localhost:8080/notify-multi-auth" \
     "whatsapp": "+573225035863",
     "push": "fcm_device_token_12345"
   },
-  "message": "Hola Ana, gracias por registrarte.",
+  "message": {
+    "email": "<html><body><h1>¡Bienvenida Ana!</h1><p>Gracias por registrarte en nuestro servicio.</p><p>Tu cuenta ha sido activada exitosamente.</p></body></html>",
+    "sms": "¡Bienvenida Ana! Gracias por registrarte. Tu cuenta ha sido activada.",
+    "whatsapp": "¡Hola Ana! 👋\n\nGracias por registrarte en nuestro servicio.\n\nTu cuenta ha sido activada exitosamente. 🎉",
+    "push": "¡Bienvenida Ana! Tu cuenta ha sido activada."
+  },
   "subject": "¡Bienvenida, Ana!",
   "metadata": {
     "tenantId": "acme",

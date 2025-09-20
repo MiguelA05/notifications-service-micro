@@ -189,7 +189,7 @@ async def _process_one(payload: Dict[str, Any]) -> None:
     
     2. Formato multi-canal:
        - destination: { "email": "...", "sms": "...", "whatsapp": "...", "push": "..." }
-       - message: contenido principal
+       - message: { "email": "HTML content", "sms": "text", "whatsapp": "text", "push": "text" }
        - subject: opcional (para email o push)
        - metadata: opcional
     """
@@ -214,23 +214,25 @@ async def _process_single_channel(payload: Dict[str, Any]) -> None:
 
 
 async def _process_multi_channel(payload: Dict[str, Any]) -> None:
-    """Procesa mensaje de múltiples canales"""
+    """Procesa mensaje de múltiples canales con mensajes específicos por canal"""
     destination_dict = payload.get("destination", {})
-    message = payload.get("message")
+    message_dict = payload.get("message", {})
     subject = payload.get("subject")
     metadata = payload.get("metadata", {})
 
-    # Procesar cada canal activo
+    # Procesar cada canal que tenga tanto destino como mensaje
     for channel_name, destination_value in destination_dict.items():
-        if destination_value:  # Solo procesar si hay destino
-            try:
-                notification_channel = _parse_channel(channel_name)
-                ch = create_channel(notification_channel)
-                await ch.send(destination=destination_value, message=message, subject=subject)
-                logger.info(f"Mensaje enviado por {channel_name} a {destination_value}")
-            except Exception as exc:
-                logger.error(f"Error enviando por {channel_name} a {destination_value}: {exc}")
-                # Continuar con otros canales aunque uno falle
+        if destination_value and channel_name in message_dict:
+            message_value = message_dict[channel_name]
+            if message_value:  # Solo procesar si hay mensaje
+                try:
+                    notification_channel = _parse_channel(channel_name)
+                    ch = create_channel(notification_channel)
+                    await ch.send(destination=destination_value, message=message_value, subject=subject)
+                    logger.info(f"Mensaje enviado por {channel_name} a {destination_value}")
+                except Exception as exc:
+                    logger.error(f"Error enviando por {channel_name} a {destination_value}: {exc}")
+                    # Continuar con otros canales aunque uno falle
 
 async def main() -> None:
     # Bucle principal del worker: consume, procesa, reintenta o manda a DLQ

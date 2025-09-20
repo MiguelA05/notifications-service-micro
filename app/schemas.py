@@ -65,26 +65,59 @@ class NotificationBase(BaseModel):
         return v
 
 
+class MultiChannelMessage(BaseModel):
+    """Mensajes específicos por canal"""
+    email: Optional[str] = Field(None, description="Mensaje HTML para email")
+    sms: Optional[str] = Field(None, description="Mensaje de texto para SMS")
+    whatsapp: Optional[str] = Field(None, description="Mensaje de texto para WhatsApp")
+    push: Optional[str] = Field(None, description="Mensaje de texto para Push")
+
+    def get_message_for_channel(self, channel: str) -> Optional[str]:
+        """Obtiene el mensaje específico para un canal"""
+        return getattr(self, channel, None)
+
+    def get_active_channels(self) -> list[ChannelName]:
+        """Retorna los canales que tienen mensaje configurado"""
+        active = []
+        if self.email:
+            active.append("email")
+        if self.sms:
+            active.append("sms")
+        if self.whatsapp:
+            active.append("whatsapp")
+        if self.push:
+            active.append("push")
+        return active
+
+
 class MultiChannelNotification(BaseModel):
-    """Notificación que puede enviarse por múltiples canales"""
+    """Notificación que puede enviarse por múltiples canales con mensajes específicos"""
     destination: MultiChannelDestination = Field(..., description="Destinos por canal")
-    message: str = Field(..., min_length=1, description="Mensaje a enviar")
+    message: MultiChannelMessage = Field(..., description="Mensajes específicos por canal")
     subject: Optional[str] = Field(None, description="Asunto (para email/push)")
     metadata: Optional[dict] = Field(None, description="Metadatos adicionales")
 
     def get_notifications(self) -> list[NotificationBase]:
         """Convierte la notificación multi-canal en notificaciones individuales"""
         notifications = []
-        active_channels = self.destination.get_active_channels()
+        destination_channels = self.destination.get_active_channels()
+        message_channels = self.message.get_active_channels()
+        
+        # Solo procesar canales que tengan tanto destino como mensaje
+        active_channels = [ch for ch in destination_channels if ch in message_channels]
         
         for channel in active_channels:
             destination_value = getattr(self.destination, channel)
+            message_value = self.message.get_message_for_channel(channel)
+            
             # Convertir EmailStr a string si es necesario
             destination_str = str(destination_value) if destination_value else ""
+            message_str = str(message_value) if message_value else ""
+            
             notifications.append(NotificationBase(
                 channel=channel,
                 destination=destination_str,
-                message=self.message,
+                message=message_str,
                 subject=self.subject
             ))
         

@@ -63,7 +63,7 @@ async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
         # Convertir a formato compatible con el worker
         worker_payload = {
             "destination": payload.destination.model_dump(),
-            "message": payload.message,
+            "message": payload.message.model_dump(),
             "subject": payload.subject,
             "metadata": payload.metadata
         }
@@ -71,6 +71,7 @@ async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
         return {
             "queued": True, 
             "channels": payload.destination.get_active_channels(),
+            "message_channels": payload.message.get_active_channels(),
             "message": "Notificación encolada para múltiples canales"
         }
     except Exception as exc:
@@ -92,7 +93,7 @@ async def send_multi_notification(payload: MultiChannelNotification, user_id: st
     try:
         worker_payload = {
             "destination": payload.destination.model_dump(),
-            "message": payload.message,
+            "message": payload.message.model_dump(),
             "subject": payload.subject,
             "metadata": payload.metadata
         }
@@ -101,7 +102,8 @@ async def send_multi_notification(payload: MultiChannelNotification, user_id: st
             "status": "ok", 
             "sent_by": user_id, 
             "queued": True,
-            "channels": payload.destination.get_active_channels()
+            "channels": payload.destination.get_active_channels(),
+            "message_channels": payload.message.get_active_channels()
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
