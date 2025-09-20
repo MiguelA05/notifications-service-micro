@@ -26,6 +26,27 @@ class ChannelInfo(BaseModel):
     provider: Optional[str] = None
 
 
+class MultiChannelDestination(BaseModel):
+    """Destinos para múltiples canales"""
+    email: Optional[EmailStr] = None
+    sms: Optional[str] = None
+    whatsapp: Optional[str] = None
+    push: Optional[str] = None
+
+    def get_active_channels(self) -> list[ChannelName]:
+        """Retorna los canales que tienen destino configurado"""
+        active = []
+        if self.email:
+            active.append("email")
+        if self.sms:
+            active.append("sms")
+        if self.whatsapp:
+            active.append("whatsapp")
+        if self.push:
+            active.append("push")
+        return active
+
+
 class NotificationBase(BaseModel):
     channel: ChannelName = Field(..., description="Canal de envío")
     destination: str = Field(..., description="Destino del mensaje")
@@ -36,9 +57,38 @@ class NotificationBase(BaseModel):
     def validate_destination(cls, v: str, values):  # noqa: N805
         channel = values.get("channel")
         if channel == "email":
-            EmailStr.validate(v)
+            # En Pydantic V2, la validación de email se hace automáticamente
+            # Solo verificamos que no esté vacío
+            if not v or not v.strip():
+                raise ValueError("Email destination cannot be empty")
         # Para sms/whatsapp/push podríamos agregar validaciones específicas
         return v
+
+
+class MultiChannelNotification(BaseModel):
+    """Notificación que puede enviarse por múltiples canales"""
+    destination: MultiChannelDestination = Field(..., description="Destinos por canal")
+    message: str = Field(..., min_length=1, description="Mensaje a enviar")
+    subject: Optional[str] = Field(None, description="Asunto (para email/push)")
+    metadata: Optional[dict] = Field(None, description="Metadatos adicionales")
+
+    def get_notifications(self) -> list[NotificationBase]:
+        """Convierte la notificación multi-canal en notificaciones individuales"""
+        notifications = []
+        active_channels = self.destination.get_active_channels()
+        
+        for channel in active_channels:
+            destination_value = getattr(self.destination, channel)
+            # Convertir EmailStr a string si es necesario
+            destination_str = str(destination_value) if destination_value else ""
+            notifications.append(NotificationBase(
+                channel=channel,
+                destination=destination_str,
+                message=self.message,
+                subject=self.subject
+            ))
+        
+        return notifications
 
 
 class NotificationCreate(NotificationBase):

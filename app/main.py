@@ -18,7 +18,7 @@ from .auth import (
     create_user,
 )
 from .models import NotificationChannel, TokenResponse
-from .schemas import NotificationFilter, NotificationCreate
+from .schemas import NotificationFilter, NotificationCreate, MultiChannelNotification
 from .crud import list_channels, list_notifications, get_notification, create_notification, get_metrics, list_schedules, get_schedule, cancel_schedule
 
 
@@ -55,12 +55,54 @@ async def notify(payload: NotifyPayload = Body(...)) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+
+@app.post("/notify-multi")
+async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
+    """Endpoint para enviar notificaciones por múltiples canales simultáneamente"""
+    try:
+        # Convertir a formato compatible con el worker
+        worker_payload = {
+            "destination": payload.destination.model_dump(),
+            "message": payload.message,
+            "subject": payload.subject,
+            "metadata": payload.metadata
+        }
+        await publish_message(routing_key="notifications.key", payload=worker_payload)
+        return {
+            "queued": True, 
+            "channels": payload.destination.get_active_channels(),
+            "message": "Notificación encolada para múltiples canales"
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 @app.post("/notify-auth")
 async def send_notification(payload: NotifyPayload, user_id: str = Depends(verify_token)):
     """Endpoint protegido que requiere autenticación JWT"""
     try:
         await publish_message(routing_key="notifications.key", payload=payload.model_dump())
         return {"status": "ok", "sent_by": user_id, "queued": True}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/notify-multi-auth")
+async def send_multi_notification(payload: MultiChannelNotification, user_id: str = Depends(verify_token)):
+    """Endpoint protegido para enviar notificaciones por múltiples canales"""
+    try:
+        worker_payload = {
+            "destination": payload.destination.model_dump(),
+            "message": payload.message,
+            "subject": payload.subject,
+            "metadata": payload.metadata
+        }
+        await publish_message(routing_key="notifications.key", payload=worker_payload)
+        return {
+            "status": "ok", 
+            "sent_by": user_id, 
+            "queued": True,
+            "channels": payload.destination.get_active_channels()
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

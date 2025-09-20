@@ -267,6 +267,48 @@ Publicar un mensaje (ejemplo push)
 - docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"push","destination":"<TOKEN>","subject":"Hola","message":"Prueba"}'
 - Monitorear worker: docker logs -f notifications-worker
 
+### Nuevos endpoints multi-canal
+
+**POST /notify-multi** - Envío a múltiples canales (sin autenticación)
+```bash
+curl -X POST "http://localhost:8080/notify-multi" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": {
+      "email": "juan@example.com",
+      "sms": "+573225035863",
+      "whatsapp": "+573225035863"
+    },
+    "message": "¡Hola Juan! Mensaje de prueba.",
+    "subject": "Mensaje de prueba",
+    "metadata": {
+      "tenantId": "acme",
+      "template": "welcome"
+    }
+  }'
+```
+
+**POST /notify-multi-auth** - Envío a múltiples canales (con autenticación JWT)
+```bash
+# Primero obtener token
+curl -X POST "http://localhost:8080/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=admin_pass"
+
+# Luego enviar notificación
+curl -X POST "http://localhost:8080/notify-multi-auth" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": {
+      "email": "juan@example.com",
+      "sms": "+573225035863"
+    },
+    "message": "Mensaje autenticado",
+    "subject": "Mensaje importante"
+  }'
+```
+
 ---
 
 ## Notas de seguridad
@@ -339,17 +381,36 @@ Publicar un mensaje (ejemplo push)
 ```
 
 ### 2) Mensaje del Orquestador → RabbitMQ (consumido por este servicio)
-- El orquestador “construye” el mensaje listo para entrega: selecciona canal, resuelve plantillas y datos.
+- El orquestador "construye" el mensaje listo para entrega: selecciona canal(es), resuelve plantillas y datos.
+
+#### Formato Multi-Canal (NUEVO)
+```json
+{
+  "destination": {
+    "email": "ana@example.com",
+    "sms": "+573225035863",
+    "whatsapp": "+573225035863",
+    "push": "fcm_device_token_12345"
+  },
+  "message": "Hola Ana, gracias por registrarte.",
+  "subject": "¡Bienvenida, Ana!",
+  "metadata": {
+    "tenantId": "acme",
+    "template": "welcome",
+    "event_id": "evt_1a2b3c",
+    "event_type": "user.welcome",
+    "trace_id": "tr_9x8y7z"
+  }
+}
+```
+
+#### Formato Simple (Compatible con versión anterior)
 ```json
 {
   "channel": "email",
   "destination": "ana@example.com",
   "subject": "¡Bienvenida, Ana!",
   "message": "Hola Ana, gracias por registrarte.",
-  "data": {
-    "template": "welcome",
-    "variables": {"first_name": "Ana"}
-  },
   "metadata": {
     "event_id": "evt_1a2b3c",
     "event_type": "user.welcome",

@@ -180,12 +180,28 @@ async def _publish_to_dlq(channel: aio_pika.Channel, payload: Dict[str, Any], he
 async def _process_one(payload: Dict[str, Any]) -> None:
     """Procesa un único mensaje.
 
-    Espera un payload con:
-    - channel: "email" | "sms" | "whatsapp" | "push"
-    - destination: destino del mensaje (email, número, token push, etc.)
-    - message: contenido principal
-    - subject: opcional (para email o push)
+    Soporta dos formatos:
+    1. Formato simple (un canal):
+       - channel: "email" | "sms" | "whatsapp" | "push"
+       - destination: destino del mensaje
+       - message: contenido principal
+       - subject: opcional (para email o push)
+    
+    2. Formato multi-canal:
+       - destination: { "email": "...", "sms": "...", "whatsapp": "...", "push": "..." }
+       - message: contenido principal
+       - subject: opcional (para email o push)
+       - metadata: opcional
     """
+    # Detectar si es formato multi-canal
+    if "destination" in payload and isinstance(payload["destination"], dict):
+        await _process_multi_channel(payload)
+    else:
+        await _process_single_channel(payload)
+
+
+async def _process_single_channel(payload: Dict[str, Any]) -> None:
+    """Procesa mensaje de un solo canal (formato original)"""
     channel_value = payload.get("channel")
     notification_channel = _parse_channel(channel_value)
 
@@ -195,6 +211,26 @@ async def _process_one(payload: Dict[str, Any]) -> None:
 
     ch = create_channel(notification_channel)
     await ch.send(destination=destination, message=message, subject=subject)
+
+
+async def _process_multi_channel(payload: Dict[str, Any]) -> None:
+    """Procesa mensaje de múltiples canales"""
+    destination_dict = payload.get("destination", {})
+    message = payload.get("message")
+    subject = payload.get("subject")
+    metadata = payload.get("metadata", {})
+
+    # Procesar cada canal activo
+    for channel_name, destination_value in destination_dict.items():
+        if destination_value:  # Solo procesar si hay destino
+            try:
+                notification_channel = _parse_channel(channel_name)
+                ch = create_channel(notification_channel)
+                await ch.send(destination=destination_value, message=message, subject=subject)
+                logger.info(f"Mensaje enviado por {channel_name} a {destination_value}")
+            except Exception as exc:
+                logger.error(f"Error enviando por {channel_name} a {destination_value}: {exc}")
+                # Continuar con otros canales aunque uno falle
 
 async def main() -> None:
     # Bucle principal del worker: consume, procesa, reintenta o manda a DLQ
