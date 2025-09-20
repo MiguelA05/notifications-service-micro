@@ -10,35 +10,27 @@ class EmailChannel(Channel):
 
     def __init__(self, config: dict = None):
         """
-        Inicializa el canal de email con configuracion
+        Inicializa el canal de email con configuracion SMTP
 
         Args:
             config: Diccionario con la configuracion del canal
-                - provider: Proveedor de email (sendgrid, smtp, etc)
-                - api_key: API key del proveedor
                 - smtp_host: Host de SMTP
                 - smtp_port: Puerto de SMTP
                 - smtp_user: Usuario de SMTP
                 - smtp_password: Password de SMTP
                 - from_email: Email de remitente
                 - from_name: Nombre de remitente
-                - template_engine: Motor de plantillas (jinja2, etc)
         """
         self.config = config or {}
         self.logger = logging.getLogger(__name__)
 
         
         #Configuraciones por defecto
-        self.provider = self.config.get("provider", "smtp")
-        self.from_email = self.config.get("from_email", "noreply@tudominio.com") #TODO: Cambiar por el email de remitente
-        self.from_name = self.config.get("from_name", "Notifications Service") #TODO: Cambiar por el nombre de remitente
-        self.template_dir = self.config.get("template_dir", "app/templates") #TODO: Cambiar por el directorio de plantillas
+        self.from_email = self.config.get("from_email", "noreply@tudominio.com")
+        self.from_name = self.config.get("from_name", "Notifications Service")
 
         #Validar configuracion requerida
-        #TODO talvez sea necesario agregar mas validaciones
-        if self.provider == "sendgrid" and not self.config.get("api_key"):
-            self.logger.warning("Sendgrid esta comfigirado, pero sin API")
-        elif self.provider == "smtp" and not self.config.get("smtp_host"):
+        if not self.config.get("smtp_host"):
             self.logger.warning("SMTP esta configurado, pero sin host")
 
     
@@ -51,44 +43,10 @@ class EmailChannel(Channel):
             raise ValueError(f"Email invalido: {destination}")
 
     async def send(self, destination: str, message: str, subject: Optional[str] = None) -> None:
-        """Envia el email a la direccion de destino usando el proveedor configurado"""
+        """Envia el email a la direccion de destino usando SMTP"""
         self.validate_destination(destination)
-
-        if self.provider == "sendgrid":
-            await self.send_with_sendgrid(destination, message, subject)
-        elif self.provider == "smtp":
-            await self.send_with_smtp(destination, message, subject)
-        else:
-            raise ValueError(f"Proveedor de email no valido: {self.provider}")
+        await self.send_with_smtp(destination, message, subject)
     
-    async def send_with_sendgrid(self, destination: str, message: str, subject: str = None) -> None:
-        """Envia el email a la direccion de destino usando Sendgrid API"""
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            #Crear el cliente SendGrid
-            sg = SendGridAPIClient(api_key=self.config["api_key"])
-
-            #Crear mensaje
-            mail = Mail(
-                from_email=(self.from_name, self.from_email),
-                to_emails=destination,
-                subject=subject or "Notificacion",
-                html_content=message
-            )
-
-            #Enviar el email
-            response = sg.send(mail)
-
-            if response.status_code >= 400:
-                raise Exception(f"Error al enviar email: {response.status_code} {response.body}")
-            
-            self.logger.info(f"Email enviado a {destination} con asunto {subject} via SendGrid")
-        
-        except Exception as e:
-            self.logger.error(f"Error al enviar email via sendgrid: {str(e)}")
-            raise
     
     async def send_with_smtp(self, destination: str, message: str, subject: str = None) -> None:
         """Envia el email a la direccion de destino usando SMTP"""

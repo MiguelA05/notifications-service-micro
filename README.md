@@ -18,7 +18,7 @@ flowchart LR
     A[Servicios de Dominio] -->|Eventos| B[Notification Orchestrator]
     B -->|publica| C[RabbitMQ vhost foro]
     C -->|notifications.queue| D[Delivery Worker]
-    D --> E1[SMTP SendGrid]
+    D --> E1[SMTP Email]
     D --> E2[Twilio SMS]
     D --> E3[Twilio WhatsApp]
     D --> E4[FCM WebPush]
@@ -77,7 +77,7 @@ flowchart LR
     SCH -->|programa| MQ;
     MQ --> WRK;
 
-    WRK --> SMTP[SMTP SendGrid];
+    WRK --> SMTP[SMTP Email];
     WRK --> SMS[Twilio SMS];
     WRK --> WA[Twilio WhatsApp];
     WRK --> PUSH[FCM WebPush];
@@ -223,8 +223,8 @@ JWT
 Base de datos
 - DB_URL=postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
 
-Email (SMTP/SendGrid)
-- SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NAME, SENDGRID_API_KEY
+Email (SMTP)
+- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NAME
 
 Twilio (SMS/WhatsApp)
 - TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TWILIO_WHATSAPP_FROM, WHATSAPP_WEBHOOK_URL

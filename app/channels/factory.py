@@ -33,25 +33,14 @@ def create_channel(channel_name: NotificationChannel, config: dict = None) -> Ch
     # Si no se pasa configuracion, se arma una por defecto desde variables de entorno
     if config is None:
         if channel_name == NotificationChannel.EMAIL:
-            # Preferir SendGrid si hay API key, de lo contrario SMTP
-            sendgrid_api_key = os.getenv("SENDGRID_API_KEY", "").strip()
-            if sendgrid_api_key:
-                config = {
-                    "provider": "sendgrid",
-                    "api_key": sendgrid_api_key,
-                    "from_email": os.getenv("FROM_EMAIL", "noreply@example.com"),
-                    "from_name": os.getenv("FROM_NAME", "Notification Service"),
-                }
-            else:
-                config = {
-                    "provider": "smtp",
-                    "smtp_host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
-                    "smtp_port": int(os.getenv("SMTP_PORT", "587")),
-                    "smtp_user": os.getenv("SMTP_USER"),
-                    "smtp_password": os.getenv("SMTP_PASSWORD"),
-                    "from_email": os.getenv("FROM_EMAIL", "noreply@example.com"),
-                    "from_name": os.getenv("FROM_NAME", "Notification Service"),
-                }
+            config = {
+                "smtp_host": os.getenv("SMTP_HOST", "smtp.gmail.com"),
+                "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+                "smtp_user": os.getenv("SMTP_USER"),
+                "smtp_password": os.getenv("SMTP_PASSWORD"),
+                "from_email": os.getenv("FROM_EMAIL", "noreply@example.com"),
+                "from_name": os.getenv("FROM_NAME", "Notification Service"),
+            }
         elif channel_name == NotificationChannel.SMS:
             config = {
                 "provider": "twilio",
