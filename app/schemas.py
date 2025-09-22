@@ -137,7 +137,7 @@ class NotificationDB(NotificationBase):
     id: int
     status: Literal["pending", "scheduled", "processing", "sent", "failed"]
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime]
 
     class Config:
         from_attributes = True

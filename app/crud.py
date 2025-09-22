@@ -54,7 +54,7 @@ def list_notifications(db: Session, f: NotificationFilter) -> PaginatedResponse:
         subject=i.subject,
         status=i.status.value,
         created_at=i.created_at,
-        updated_at=i.updated_at,
+        updated_at=i.sent_at,
     ) for i in items]
     meta = PageMeta(page=f.page, size=f.size, total=total)
     return PaginatedResponse(items=items_schema, meta=meta)
@@ -72,7 +72,7 @@ def get_notification(db: Session, notification_id: int) -> Optional[Notification
         subject=i.subject,
         status=i.status.value,
         created_at=i.created_at,
-        updated_at=i.updated_at,
+        updated_at=i.sent_at,
     )
 
 
@@ -143,7 +143,7 @@ def list_schedules(db: Session, page: int = 1, size: int = 20) -> PaginatedRespo
         subject=i.subject,
         status=i.status.value,
         created_at=i.created_at,
-        updated_at=i.updated_at,
+        updated_at=i.sent_at,
     ) for i in items]
     return PaginatedResponse(items=items_schema, meta=PageMeta(page=page, size=size, total=total))
 
@@ -160,7 +160,7 @@ def get_schedule(db: Session, schedule_id: int) -> Optional[NotificationDB]:
         subject=i.subject,
         status=i.status.value,
         created_at=i.created_at,
-        updated_at=i.updated_at,
+        updated_at=i.sent_at,
     )
 
 
