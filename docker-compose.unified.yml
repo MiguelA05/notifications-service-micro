@@ -1,22 +1,41 @@
 services:
+  # Nombre del servicio dentro del archivo de Docker Compose
   rabbitmq:
+    # Imagen de RabbitMQ con el plugin de panel de administración incluido
     image: rabbitmq:3-management
+    # Nombre fijo del contenedor para referenciarlo fácilmente desde otros servicios o comandos
     container_name: rabbitmq
+    # Mapeo de puertos del host al contenedor
     ports:
+      # Puerto AMQP (host:contenedor) usado por los clientes (app/worker/orquestador)
       - "5672:5672"
+      # Puerto de la consola web de administración (http://localhost:15672)
       - "15672:15672"
+    # Variables de entorno para inicializar usuario/vhost por defecto
     environment:
+      # Usuario administrador inicial del broker
       RABBITMQ_DEFAULT_USER: admin
+      # Contraseña del usuario administrador
       RABBITMQ_DEFAULT_PASS: admin_pass
+      # Virtual host por defecto donde se crean exchanges/colas/bindings
       RABBITMQ_DEFAULT_VHOST: foro
+    # Comprobación de salud para esperar a que RabbitMQ esté listo antes de depender de él
     healthcheck:
+      # Diagnóstico oficial que valida conectividad de puertos internos del broker
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      # Intervalo entre chequeos de salud
       interval: 10s
+      # Tiempo máximo permitido por cada chequeo
       timeout: 5s
+      # Número de reintentos antes de marcar el servicio como unhealthy
       retries: 5
+      # Tiempo de gracia inicial antes de comenzar a chequear (útil para el arranque)
       start_period: 30s
+    # Montaje de archivos de configuración/definiciones en modo solo lectura
     volumes:
+      # rabbitmq.conf: configuración del broker (listeners, vhosts, políticas, etc.)
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      # definitions.json: usuarios, vhosts, exchanges, colas y bindings predefinidos
       - ./definitions.json:/etc/rabbitmq/definitions.json:ro
 
   postgres_notifications:
