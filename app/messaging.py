@@ -62,13 +62,8 @@ async def setup_infrastructure() -> None:
 
 async def publish_message(routing_key: str, payload: dict) -> None:
     async with _connection_channel() as channel:
-        # No forzamos declaración si el exchange ya existe. Si se declara, respetamos el tipo configurado.
-        ex_type = {
-            "direct": aio_pika.ExchangeType.DIRECT,
-            "topic": aio_pika.ExchangeType.TOPIC,
-            "fanout": aio_pika.ExchangeType.FANOUT,
-        }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
-        exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
+        # Usar el exchange existente sin redeclararlo para evitar conflictos con definiciones pre-cargadas
+        exchange = await channel.get_exchange(EXCHANGE_NAME)
         body = json.dumps(payload).encode("utf-8")
         message = aio_pika.Message(body=body, content_type="application/json", delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
         await exchange.publish(message, routing_key=routing_key)
