@@ -89,7 +89,7 @@ flowchart LR
 ### Topología de RabbitMQ (simplificada)
 ```mermaid
 flowchart TB
-    X[orquestador.events (topic)] -->|notifications.*| Q[notifications.queue]
+    X[orquestador.events (topic)] --> Q[notifications.queue]
 
     subgraph Retries
         XR1[orquestador.events.retry.1] --> R1[notifications.queue.retry.1 TTL5s]
