@@ -112,6 +112,7 @@ services:
       DATASOURCE_USERNAME: user
       DATASOURCE_PASSWORD: pass
       FLYWAY_ENABLED: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
       HIBERNATE_SQL_LOG: INFO
       HIBERNATE_BINDER_LOG: INFO
       APP_LOG_LEVEL: INFO
@@ -130,8 +131,43 @@ services:
       postgres_domain:
         condition: service_healthy
 
+  orchestrator-db:
+    image: postgres:16-alpine
+    container_name: postgres-orchestrator
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_orchestrator:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orchestrator-service:
+    build:
+      context: ../orquestador-solicitudes-micro
+    container_name: orquestador-solicitudes-micro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      orchestrator-db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://user:pass@postgres-orchestrator:5432/mydb?schema=public
+      RABBITMQ_URL: amqp://orchestrator_user:orch_pass@rabbitmq:5672/foro
+    ports:
+      - "3000:3000"
+
 volumes:
   pgdata_notifications:
   pgdata_domain:
+  pgdata_orchestrator:
+
 
 
