@@ -7,7 +7,7 @@ services:
       - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_PASS: admin_pass
       RABBITMQ_DEFAULT_VHOST: foro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
@@ -15,6 +15,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
 
   app:
     build:
@@ -30,8 +33,11 @@ services:
     environment:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: admin
-      RABBITMQ_PASSWORD: admin
+      RABBITMQ_USERNAME: orchestrator_user
+      RABBITMQ_PASSWORD: orch_pass
+      AMQP_EXCHANGE: orquestador.events
+      AMQP_EXCHANGE_TYPE: topic
+      MESSAGING_DECLARE_INFRA: "false"
       DB_URL: postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
       # Email Configuration
       SMTP_USER: ${SMTP_USER:-}
