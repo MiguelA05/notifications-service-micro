@@ -1,5 +1,59 @@
 ## Notifications Service Micro (Python/FastAPI)
 
+### Quickstart TL;DR
+- Requisitos: Docker y Docker Compose.
+- Configura `.env` mínimo (en la raíz):
+```env
+RABBITMQ_HOST=rabbitmq
+RABBITMQ_PORT=5672
+RABBITMQ_VHOST=foro
+RABBITMQ_USERNAME=orchestrator_user
+RABBITMQ_PASSWORD=orch_pass
+AMQP_EXCHANGE=orquestador.events
+AMQP_EXCHANGE_TYPE=topic
+AMQP_QUEUE=notifications.queue
+AMQP_ROUTING_KEY=notifications.created
+AMQP_DLX_NAME=dlx
+AMQP_DLX_TYPE=topic
+MESSAGING_DECLARE_INFRA=false
+WORKER_DECLARE_INFRA=false
+DB_URL=postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
+# SMTP opcional para email (usar App Password de Gmail)
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=tu_correo@gmail.com
+# SMTP_PASSWORD=app_password_16_chars
+# FROM_EMAIL=tu_correo@gmail.com
+# FROM_NAME=Notifications Service
+```
+- Levantar stack:
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+- Verificar:
+```bash
+curl http://localhost:8080/health        # {"status":"ok"}
+docker ps                                 # contenedores Up/healthy
+```
+- Prueba rápida (SMS o similar):
+```bash
+curl -X POST "http://localhost:8080/notify" \
+  -H "Content-Type: application/json" \
+  -d '{"channel":"sms","destination":"+573225035863","message":"Hola!"}'
+```
+- Multi‑canal:
+```bash
+curl -X POST "http://localhost:8080/notify-multi" \
+  -H "Content-Type: application/json" \
+  -d '{"destination":{"sms":"+573225035863"},"message":{"sms":"Hola multi!"}}'
+```
+- Logs útiles:
+```bash
+docker logs notifications-service-micro --since=1m
+docker logs notifications-worker --since=1m
+```
+
 ### Descripción general
 - Microservicio de “Delivery” de notificaciones. Recibe eventos por RabbitMQ y envía por Email/SMS/WhatsApp/Push.
 - Pensado para convivir con un Orquestador de Notificaciones (otro servicio) y con los Microservicios de Dominio (usuarios, ventas, etc.).
@@ -35,18 +89,20 @@ flowchart LR
 ### Topología de RabbitMQ (simplificada)
 ```mermaid
 flowchart TB
-    X[notifications.exchange] -->|notifications.key| Q[notifications.queue]
+    X[orquestador.events (topic)] -->|notifications.*| Q[notifications.queue]
 
     subgraph Retries
-        XR1[exchange.retry.1] --> R1[queue.retry.1 TTL5s]
-        XR2[exchange.retry.2] --> R2[queue.retry.2 TTL30s]
-        XR3[exchange.retry.3] --> R3[queue.retry.3 TTL120s]
+        XR1[orquestador.events.retry.1] --> R1[notifications.queue.retry.1 TTL5s]
+        XR2[orquestador.events.retry.2] --> R2[notifications.queue.retry.2 TTL30s]
+        XR3[orquestador.events.retry.3] --> R3[notifications.queue.retry.3 TTL120s]
     end
 
     subgraph DeadLetter
-        DLX_EX[notifications.exchange.dlx] --> DLQ_Q[notifications.queue.dlq]
+        DLX_EX[dlx (topic)] --> DLQ_Q[notifications.queue.dlq]
     end
 ```
+
+Nota: En este stack, los reintentos se publican reutilizando el exchange existente (get_exchange) sin redeclarar recursos ya definidos en el broker para evitar PRECONDITION_FAILED.
 
 ### Diagrama general de la plataforma (con BDs)
 ```mermaid
@@ -159,14 +215,15 @@ sequenceDiagram
   - `NotificationMetrics`: agregados simples para monitoreo.
   - `User`: soporte de autenticación JWT del propio servicio (login/register de pruebas).
   - Este servicio no almacena plantillas fuertes ni reglas; recibe el mensaje ya construido desde el Orquestador.
-- Usuarios (ejemplo de roles en este stack local):
-  - orchestrator_user/orch_pass: permisos totales en vhost foro.
-  - notifications_user/notif_pass: permisos sobre recursos notifications.* (exchanges y colas).
-- Topología que crea el servicio:
-  - Exchange principal: notifications.exchange (direct, durable)
-  - Cola principal: notifications.queue (durable, x-dead-letter-exchange=notifications.exchange.dlx)
-  - Exchange DLX: notifications.exchange.dlx (fanout) → Cola DLQ: notifications.queue.dlq
-  - Retries con backoff: exchanges notifications.exchange.retry.{1..3} y colas notifications.queue.retry.{1..3} con TTLs crecientes y dead-letter de vuelta al exchange principal.
+- Usuarios (roles usados en este stack local):
+  - orchestrator_user/orch_pass: permisos totales en vhost foro (usado por API/Worker).
+  - admin/admin_pass: administración del broker.
+- Topología efectiva (pre-cargada vía definitions.json):
+  - Exchange principal: orquestador.events (topic, durable)
+  - Cola principal: notifications.queue (durable, x-dead-letter-exchange=dlx)
+  - Exchange DLX: dlx (topic) → Cola DLQ: notifications.queue.dlq
+  - Binding: orquestador.events → notifications.queue con routing key notifications.*
+  - Retries: gestionados por el worker (opcional) sin redeclarar exchanges/colas del broker.
 
 ---
 
@@ -209,13 +266,15 @@ RabbitMQ
 - RABBITMQ_HOST=rabbitmq
 - RABBITMQ_PORT=5672
 - RABBITMQ_VHOST=foro
-- RABBITMQ_USERNAME=notifications_user
-- RABBITMQ_PASSWORD=notif_pass
-- AMQP_EXCHANGE=notifications.exchange
-- AMQP_EXCHANGE_TYPE=direct   # Cambiar a "topic" si usas orquestador.events
+- RABBITMQ_USERNAME=orchestrator_user
+- RABBITMQ_PASSWORD=orch_pass
+- AMQP_EXCHANGE=orquestador.events
+- AMQP_EXCHANGE_TYPE=topic
 - AMQP_QUEUE=notifications.queue
-- AMQP_ROUTING_KEY=notifications.key
-- MESSAGING_DECLARE_INFRA=true # false si el broker ya trae la topología
+- AMQP_ROUTING_KEY=notifications.created
+- AMQP_DLX_NAME=dlx
+- AMQP_DLX_TYPE=topic
+- MESSAGING_DECLARE_INFRA=false # el broker ya trae la topología por definitions.json
 
 JWT
 - SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -239,7 +298,7 @@ Worker (reintentos)
 - WORKER_RETRY_DELAY_2=30
 - WORKER_RETRY_DELAY_3=120
 - DEFAULT_CHANNEL=email
-- WORKER_DECLARE_INFRA=true # false si el broker ya trae la topología
+- WORKER_DECLARE_INFRA=false # no redeclarar si el broker ya trae la topología
 
 Scheduler (demo)
 - SCHEDULER_DEMO_CHANNEL, SCHEDULER_DEMO_DESTINATION, SCHEDULER_DEMO_DELAY_SEC
@@ -251,7 +310,7 @@ Scheduler (demo)
 2) docker compose up -d
 3) Verificar estado:
    - docker ps
-   - RabbitMQ UI: http://localhost:15672 (admin/admin). Vhost: foro.
+   - RabbitMQ UI: http://localhost:15672 (admin/admin_pass). Vhost: foro.
 4) Logs rápidos:
    - API: docker logs notifications-service-micro --since=1m
    - Worker: docker logs notifications-worker --since=1m
@@ -263,9 +322,21 @@ Scheduler (demo)
 Healthcheck
 - curl http://localhost:8080/health → {"status":"ok"}
 
-Publicar un mensaje (ejemplo push)
-- docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"push","destination":"<TOKEN>","subject":"Hola","message":"Prueba"}'
+Publicar un mensaje simple
+- docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"sms","destination":"+573225035863","message":"Prueba"}'
 - Monitorear worker: docker logs -f notifications-worker
+
+Publicar multi‑canal (usa orquestador.events y encola para sms/email)
+- curl -X POST "http://localhost:8080/notify-multi" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "destination": {"email": "juan@example.com", "sms": "+573225035863"},
+    "message": {"email": "<html><body><b>Hola</b></body></html>", "sms": "Hola por SMS"},
+    "subject": "Prueba multi"
+  }'
+
+Listado con filtros y paginación
+- curl "http://localhost:8080/notifications?channel=sms&status=pending&q=Prueba&page=1&size=10"
 
 ### Manejo de Mensajes HTML vs Texto
 
@@ -332,6 +403,8 @@ curl -X POST "http://localhost:8080/notify-multi-auth" \
 ## Notas de seguridad
 - No publiques el JSON de la service account de Firebase.
 - Aísla usuarios y permisos por vhost; en producción, separa aún más los roles y usa TLS si es necesario.
+- Gmail SMTP: usa App Password (16 caracteres) con 2FA; no utilices la contraseña normal. Evita espacios en el App Password.
+- Twilio SMS: habilita Geo Permissions para el país destino (p.ej., Colombia), adquiere un número con capacidad SMS y, si tu cuenta es Trial, verifica el número destino.
 
 ---
 
@@ -346,8 +419,8 @@ curl -X POST "http://localhost:8080/notify-multi-auth" \
 ## Solución de problemas (FAQ)
 - ACCESS_REFUSED (RabbitMQ):
   - Verifica usuario, contraseña, vhost y permisos. Este servicio usa notifications_user/notif_pass en el vhost foro.
-- PRECONDITION_FAILED (inequivalent arg x-dead-letter-exchange):
-  - Ocurre si la cola ya existía con otros argumentos. Borra la cola o usa get_queue sin redeclarar con otros args.
+- PRECONDITION_FAILED (inequivalent arg auto_delete/x-dead-letter-exchange):
+  - Evita redeclarar exchanges/colas creados por el broker. El API usa get_exchange y el worker evita redeclaración en reintentos.
 - python-multipart requerido:
   - Añadido en requirements. Si usas formularios, debe estar instalado.
 - Template Jinja2 no encontrado:
@@ -465,7 +538,7 @@ curl -X POST "http://localhost:8080/notify-multi-auth" \
 2) Orquestador aplica reglas:
    - Elige canal “email” si existe email válido; como fallback, “push”.
    - Resuelve plantilla "welcome" con {first_name:"Ana"} → subject y body renderizados.
-   - Publica a RabbitMQ (exchange notifications.exchange, routing key notifications.key) el payload del ejemplo 2.
+  - Publica a RabbitMQ (exchange orquestador.events, routing key notifications.*) el payload del ejemplo 2; el binding a notifications.queue está definido en definitions.json.
 3) Este Delivery consume de notifications.queue y envía por el canal indicado.
 
 ### Diagrama de secuencia (resumen)
