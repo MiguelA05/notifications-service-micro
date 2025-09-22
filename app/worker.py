@@ -144,12 +144,8 @@ async def _publish_to_retry(channel: aio_pika.Channel, retry_index: int, payload
     # Modo compatibilidad: espera en el worker y republica al exchange principal
     retry_delay = RETRY_DELAYS[max(0, retry_index - 1)]
     await asyncio.sleep(retry_delay)
-    ex_type = {
-        "direct": aio_pika.ExchangeType.DIRECT,
-        "topic": aio_pika.ExchangeType.TOPIC,
-        "fanout": aio_pika.ExchangeType.FANOUT,
-    }.get(EXCHANGE_TYPE, aio_pika.ExchangeType.DIRECT)
-    main_exchange = await channel.declare_exchange(EXCHANGE_NAME, ex_type, durable=True)
+    # No redeclarar el exchange principal; usar el existente para evitar conflictos con definiciones pre-cargadas
+    main_exchange = await channel.get_exchange(EXCHANGE_NAME)
     body = json.dumps(payload).encode("utf-8")
     msg = aio_pika.Message(
         body=body,
