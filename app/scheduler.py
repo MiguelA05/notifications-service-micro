@@ -44,6 +44,8 @@ RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "foro")
 
 EXCHANGE_NAME = os.getenv("AMQP_EXCHANGE", "notifications.exchange")
 ROUTING_KEY = os.getenv("AMQP_ROUTING_KEY", "notifications.key")
+# Alinear tipo de exchange por variable de entorno como en messaging/worker
+EXCHANGE_TYPE = os.getenv("AMQP_EXCHANGE_TYPE", "topic").lower()
 
 async def _publish(payload: Dict[str, Any]) -> None:
     # Publica el payload en RabbitMQ para que lo consuma el worker
@@ -51,7 +53,8 @@ async def _publish(payload: Dict[str, Any]) -> None:
     connection = await aio_pika.connect_robust(url)
     async with connection:
         channel = await connection.channel()
-        exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+        # Obtener el exchange existente sin declararlo (evita conflictos de tipo/parámetros)
+        exchange = await channel.get_exchange(EXCHANGE_NAME)
         body = json.dumps(payload).encode("utf-8")
         message = aio_pika.Message(
             body=body,

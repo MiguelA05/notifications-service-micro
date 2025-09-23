@@ -141,9 +141,14 @@ services:
       # RabbitMQ
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: domain_user
-      SPRING_RABBITMQ_PASSWORD: domain_pass
+      SPRING_RABBITMQ_USERNAME: orchestrator_user
+      SPRING_RABBITMQ_PASSWORD: orch_pass
       SPRING_RABBITMQ_VIRTUAL_HOST: foro
+      # Depuracion y confirms de publicacion
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_AMQP: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_RABBIT: DEBUG
+      SPRING_RABBITMQ_PUBLISHER_CONFIRM_TYPE: simple
+      SPRING_RABBITMQ_PUBLISHER_RETURNS: "true"
     depends_on:
       rabbitmq:
         condition: service_healthy
