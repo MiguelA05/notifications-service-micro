@@ -2,7 +2,7 @@ from app.channels.factory import create_channel
 from fastapi import FastAPI, Body, HTTPException, Depends, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import asyncio
 import logging
 import os
@@ -23,8 +23,10 @@ from .crud import list_channels, list_notifications, get_notification, create_no
 
 
 class NotifyPayload(BaseModel):
-    destination: str
-    message: str
+    channel: str = Field(..., description="Canal de envío (email, sms, whatsapp, push)")
+    destination: str = Field(..., description="Destino del mensaje")
+    message: str = Field(..., min_length=1, description="Mensaje a enviar")
+    subject: Optional[str] = Field(None, description="Asunto (para email/push)")
 
 
 app = FastAPI(title="notifications-service-micro", version="1.0.0")

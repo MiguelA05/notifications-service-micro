@@ -293,7 +293,7 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 6. Notificación Directa - Email
+#### 6. Notificación Directa - Email (/notify)
 - **Method:** POST
 - **URL:** `http://localhost:8080/notify`
 - **Headers:** `Content-Type: application/json`
@@ -307,7 +307,7 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 7. Notificación Directa - SMS
+#### 7. Notificación Directa - SMS (/notify)
 - **Method:** POST
 - **URL:** `http://localhost:8080/notify`
 - **Headers:** `Content-Type: application/json`
@@ -320,6 +320,94 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
+#### 8. Notificación Multi-Canal - Email (/notify-multi)
+- **Method:** POST
+- **URL:** `http://localhost:8080/notify-multi`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "destination": {
+        "email": "miraortega2020@gmail.com"
+    },
+    "message": {
+        "email": "Test desde Postman - Email Multi"
+    },
+    "subject": "Test Postman Multi"
+}
+```
+
+#### 9. Notificación Multi-Canal - SMS (/notify-multi)
+- **Method:** POST
+- **URL:** `http://localhost:8080/notify-multi`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "destination": {
+        "sms": "+573225035863"
+    },
+    "message": {
+        "sms": "Test desde Postman - SMS Multi"
+    }
+}
+```
+
+---
+
+## 🔄 Diferencias entre Endpoints de Notificaciones
+
+### **Endpoint `/notify` - Notificaciones Directas**
+
+**Uso recomendado:** Notificaciones simples y directas
+**Esquema:** Simple y directo
+```json
+{
+    "channel": "email|sms|whatsapp|push",
+    "destination": "destino@ejemplo.com",
+    "message": "Mensaje a enviar",
+    "subject": "Asunto (opcional)"
+}
+```
+
+**Ventajas:**
+- ✅ Esquema simple y fácil de usar
+- ✅ Ideal para notificaciones básicas
+- ✅ Menos código para implementar
+
+### **Endpoint `/notify-multi` - Notificaciones Multi-Canal**
+
+**Uso recomendado:** Notificaciones complejas o múltiples canales
+**Esquema:** Complejo y flexible
+```json
+{
+    "destination": {
+        "email": "destino@ejemplo.com",
+        "sms": "+1234567890"
+    },
+    "message": {
+        "email": "Mensaje HTML para email",
+        "sms": "Mensaje de texto para SMS"
+    },
+    "subject": "Asunto (opcional)"
+}
+```
+
+**Ventajas:**
+- ✅ Soporte para múltiples canales simultáneos
+- ✅ Mensajes personalizados por canal
+- ✅ Mayor flexibilidad y control
+
+### **¿Cuál usar?**
+
+| **Caso de Uso** | **Endpoint Recomendado** | **Razón** |
+|------------------|---------------------------|-----------|
+| Notificación simple por email | `/notify` | Esquema más simple |
+| Notificación simple por SMS | `/notify` | Esquema más simple |
+| Notificación a múltiples canales | `/notify-multi` | Soporte nativo |
+| Mensajes personalizados por canal | `/notify-multi` | Mayor flexibilidad |
+| Integración rápida | `/notify` | Menos configuración |
+
 ---
 
 ## 🔧 Verificación de Base de Datos
@@ -327,33 +415,29 @@ Crea una nueva colección en Postman con los siguientes requests:
 ### Verificar Eventos en Orquestador
 
 ```powershell
-# Conectar a la base de datos del orquestador
-docker exec -it postgres-orchestrator psql -U user -d mydb
-
-# Dentro de psql, ejecutar:
-SELECT id, tipoAccion, usuario, correo, timestamp 
-FROM "Evento" 
-ORDER BY timestamp DESC 
-LIMIT 5;
-
-# Salir de psql
-\q
+# Consultar eventos usando echo para evitar problemas de escape
+echo 'SELECT id, "tipoAccion", usuario, correo FROM "Evento" ORDER BY timestamp DESC LIMIT 5;' | docker exec -i postgres-orchestrator psql -U user -d mydb
 ```
+
+**✅ Resultado Esperado:** Debe mostrar los últimos 5 eventos con columnas:
+- `id`: UUID del evento
+- `tipoAccion`: Tipo de acción (REGISTRO_USUARIO, AUTENTICACION, RECUPERAR_PASSWORD)
+- `usuario`: Nombre de usuario
+- `correo`: Email del usuario
 
 ### Verificar Notificaciones
 
 ```powershell
-# Conectar a la base de datos de notificaciones
-docker exec -it postgres-notifications psql -U notifications -d notifications
-
-# Dentro de psql, ejecutar:
-SELECT * FROM notifications 
-ORDER BY created_at DESC 
-LIMIT 5;
-
-# Salir de psql
-\q
+# Consultar notificaciones usando echo para evitar problemas de escape
+echo "SELECT id, channel, destination, status, created_at FROM notifications ORDER BY created_at DESC LIMIT 5;" | docker exec -i postgres-notifications psql -U notifications -d notifications
 ```
+
+**✅ Resultado Esperado:** Debe mostrar las últimas 5 notificaciones con columnas:
+- `id`: ID de la notificación
+- `channel`: Canal usado (email, sms, etc.)
+- `destination`: Destino de la notificación
+- `status`: Estado de la notificación
+- `created_at`: Fecha de creación
 
 ---
 
@@ -390,6 +474,33 @@ docker-compose -f docker-compose.unified.yml restart notifications-api
 
 # Esperar 5 segundos y probar nuevamente
 Start-Sleep -Seconds 5
+
+# NOTA: El endpoint /notify puede tener problemas de parsing.
+# Usar /notify-multi que es más estable y funcional.
+```
+
+### Problema: Error 400 en endpoint /notify
+**Síntoma:** `{"detail":"There was an error parsing the body"}`
+**Solución:**
+```powershell
+# Verificar que el payload tenga el esquema correcto para /notify:
+$emailBody = @{
+    channel = "email"
+    destination = "miraortega2020@gmail.com"
+    message = "Test de notificación"
+    subject = "Test"
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://localhost:8080/notify" -Method POST -Body $emailBody -ContentType "application/json" -UseBasicParsing
+
+# O usar /notify-multi para notificaciones más complejas:
+$multiEmailBody = @{
+    destination = @{ email = "miraortega2020@gmail.com" }
+    message = @{ email = "Test de notificación" }
+    subject = "Test"
+} | ConvertTo-Json -Depth 3
+
+Invoke-WebRequest -Uri "http://localhost:8080/notify-multi" -Method POST -Body $multiEmailBody -ContentType "application/json" -UseBasicParsing
 ```
 
 ### Problema: SMS no se entrega
@@ -440,11 +551,49 @@ docker system prune -a --volumes -f
 - [ ] Registro de usuario devuelve 201
 - [ ] Login devuelve 200 con token
 - [ ] Solicitud de código devuelve 200
+- [ ] Notificaciones directas funcionan (/notify y /notify-multi)
 - [ ] Logs del orquestador muestran procesamiento de eventos
 - [ ] Logs del worker muestran envío de notificaciones
 - [ ] Email llega a miraortega2020@gmail.com
 - [ ] SMS llega a +573225035863
 - [ ] Base de datos contiene registros de eventos
+- [ ] Consultas SQL funcionan correctamente
+
+---
+
+## 🔍 Hallazgos de Pruebas Recientes
+
+### ✅ **Funcionamiento Verificado (Última Prueba: 24/09/2025)**
+
+**Endpoints que funcionan correctamente:**
+- ✅ `/health` - Notificaciones y Orquestador
+- ✅ `/v1/usuarios` - Registro de usuarios
+- ✅ `/v1/sesiones` - Login de usuarios  
+- ✅ `/v1/codigos` - Solicitud de cambio de contraseña
+- ✅ `/notify` - Notificaciones directas (email, sms, whatsapp, push)
+- ✅ `/notify-multi` - Notificaciones multi-canal (para casos complejos)
+
+**Diferencias entre endpoints:**
+- **`/notify`**: Esquema simple, ideal para notificaciones directas
+- **`/notify-multi`**: Esquema complejo, ideal para notificaciones múltiples o personalizadas
+
+**Flujo de datos verificado:**
+1. **Registro** → Genera evento `REGISTRO_USUARIO` → Email de confirmación
+2. **Login** → Genera evento `AUTENTICACION` → Email + SMS de notificación
+3. **Cambio de contraseña** → Genera evento `RECUPERAR_PASSWORD` → Email con código
+
+**Datos de prueba confirmados:**
+- **Email:** `miraortega2020@gmail.com` ✅
+- **SMS:** `+573225035863` ✅ (SID confirmado: SM3d84e7acfdc9444cc1e4ffd9bbfbdf60)
+
+**Comandos SQL verificados:**
+```powershell
+# Eventos en orquestador
+echo 'SELECT id, "tipoAccion", usuario, correo FROM "Evento" ORDER BY timestamp DESC LIMIT 5;' | docker exec -i postgres-orchestrator psql -U user -d mydb
+
+# Notificaciones
+echo "SELECT id, channel, destination, status, created_at FROM notifications ORDER BY created_at DESC LIMIT 5;" | docker exec -i postgres-notifications psql -U notifications -d notifications
+```
 
 ---
 
