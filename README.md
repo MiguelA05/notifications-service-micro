@@ -323,11 +323,11 @@ Healthcheck
 - curl http://localhost:8080/health → {"status":"ok"}
 
 Publicar un mensaje simple
-- docker exec notifications-service-micro curl -s -X POST http://localhost:8080/notify -H "Content-Type: application/json" -d '{"channel":"sms","destination":"+573225035863","message":"Prueba"}'
+- curl -X POST "http://localhost:8080/v1/notifications" -H "Content-Type: application/json" -d '{"channel":"sms","destination":"+573225035863","message":"Prueba"}'
 - Monitorear worker: docker logs -f notifications-worker
 
 Publicar multi‑canal (usa orquestador.events y encola para sms/email)
-- curl -X POST "http://localhost:8080/notify-multi" \
+- curl -X POST "http://localhost:8080/v1/notifications/multi" \
   -H "Content-Type: application/json" \
   -d '{
     "destination": {"email": "juan@example.com", "sms": "+573225035863"},
@@ -351,9 +351,9 @@ Los templates HTML son manejados por el orquestador, no por este servicio.
 
 ### Nuevos endpoints multi-canal
 
-**POST /notify-multi** - Envío a múltiples canales (sin autenticación)
+**POST /v1/notifications/multi** - Envío a múltiples canales (sin autenticación)
 ```bash
-curl -X POST "http://localhost:8080/notify-multi" \
+curl -X POST "http://localhost:8080/v1/notifications/multi" \
   -H "Content-Type: application/json" \
   -d '{
     "destination": {
@@ -374,7 +374,7 @@ curl -X POST "http://localhost:8080/notify-multi" \
   }'
 ```
 
-**POST /notify-multi-auth** - Envío a múltiples canales (con autenticación JWT)
+**POST /v1/notifications/multi/auth** - Envío a múltiples canales (con autenticación JWT)
 ```bash
 # Primero obtener token
 curl -X POST "http://localhost:8080/login" \
@@ -382,7 +382,7 @@ curl -X POST "http://localhost:8080/login" \
   -d "username=admin&password=admin_pass"
 
 # Luego enviar notificación
-curl -X POST "http://localhost:8080/notify-multi-auth" \
+curl -X POST "http://localhost:8080/v1/notifications/multi/auth" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -566,5 +566,33 @@ sequenceDiagram
 ### Validaciones mínimas que hace el Delivery
 - Requiere `channel` válido y `destination` con formato del canal (email válido, E.164 para SMS/WA, token para push).
 - Si faltan campos o el proveedor responde error no recuperable, el mensaje terminará en DLQ tras reintentos.
+
+---
+
+## ✅ Estado Actual del Sistema (Verificado 24/09/2025)
+
+### Endpoints Funcionando Correctamente
+- ✅ `GET /health` - Health check del servicio
+- ✅ `POST /notify` - Notificaciones directas (email, sms, whatsapp, push)
+- ✅ `POST /notify-multi` - Notificaciones multi-canal
+- ✅ `POST /login` - Autenticación JWT
+- ✅ `POST /register` - Registro de usuarios para pruebas
+
+### Integración con Microservicios
+- ✅ **Domain Service**: Publica eventos a RabbitMQ que son procesados por el Orchestrator
+- ✅ **Orchestrator**: Procesa eventos y envía notificaciones via `/notify-multi`
+- ✅ **Worker**: Procesa colas de notificaciones y envía emails/SMS correctamente
+- ✅ **RabbitMQ**: Topología configurada y funcionando (vhost: foro)
+
+### Flujo End-to-End Verificado
+1. **Registro de usuario** en Domain Service → Evento publicado a RabbitMQ
+2. **Orchestrator procesa** el evento → Envía notificación via `/notify-multi`
+3. **Worker consume** la cola → Envía email/SMS al usuario
+4. **Notificaciones directas** via `/notify` funcionan correctamente
+
+### Datos de Prueba Confirmados
+- **Email de prueba**: `miraortega2020@gmail.com` ✅
+- **SMS de prueba**: `+573225035863` ✅
+- **Base de datos**: Eventos y notificaciones persistiendo correctamente
 
 

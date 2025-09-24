@@ -176,7 +176,7 @@ $emailBody = @{
 } | ConvertTo-Json
 
 Write-Host "Enviando notificación por email..." -ForegroundColor Green
-$emailResponse = Invoke-WebRequest -Uri "http://localhost:8080/notify" -Method POST -Body $emailBody -ContentType "application/json" -UseBasicParsing
+$emailResponse = Invoke-WebRequest -Uri "http://localhost:8080/v1/notifications" -Method POST -Body $emailBody -ContentType "application/json" -UseBasicParsing
 Write-Host "Email Status: $($emailResponse.StatusCode)" -ForegroundColor Yellow
 
 # Notificación por SMS
@@ -187,7 +187,7 @@ $smsBody = @{
 } | ConvertTo-Json
 
 Write-Host "Enviando notificación por SMS..." -ForegroundColor Green
-$smsResponse = Invoke-WebRequest -Uri "http://localhost:8080/notify" -Method POST -Body $smsBody -ContentType "application/json" -UseBasicParsing
+$smsResponse = Invoke-WebRequest -Uri "http://localhost:8080/v1/notifications" -Method POST -Body $smsBody -ContentType "application/json" -UseBasicParsing
 Write-Host "SMS Status: $($smsResponse.StatusCode)" -ForegroundColor Yellow
 ```
 
@@ -293,9 +293,9 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 6. Notificación Directa - Email (/notify)
+#### 6. Notificación Directa - Email (/v1/notifications)
 - **Method:** POST
-- **URL:** `http://localhost:8080/notify`
+- **URL:** `http://localhost:8080/v1/notifications`
 - **Headers:** `Content-Type: application/json`
 - **Body (JSON):**
 ```json
@@ -307,9 +307,9 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 7. Notificación Directa - SMS (/notify)
+#### 7. Notificación Directa - SMS (/v1/notifications)
 - **Method:** POST
-- **URL:** `http://localhost:8080/notify`
+- **URL:** `http://localhost:8080/v1/notifications`
 - **Headers:** `Content-Type: application/json`
 - **Body (JSON):**
 ```json
@@ -320,9 +320,9 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 8. Notificación Multi-Canal - Email (/notify-multi)
+#### 8. Notificación Multi-Canal - Email (/v1/notifications/multi)
 - **Method:** POST
-- **URL:** `http://localhost:8080/notify-multi`
+- **URL:** `http://localhost:8080/v1/notifications/multi`
 - **Headers:** `Content-Type: application/json`
 - **Body (JSON):**
 ```json
@@ -337,9 +337,9 @@ Crea una nueva colección en Postman con los siguientes requests:
 }
 ```
 
-#### 9. Notificación Multi-Canal - SMS (/notify-multi)
+#### 9. Notificación Multi-Canal - SMS (/v1/notifications/multi)
 - **Method:** POST
-- **URL:** `http://localhost:8080/notify-multi`
+- **URL:** `http://localhost:8080/v1/notifications/multi`
 - **Headers:** `Content-Type: application/json`
 - **Body (JSON):**
 ```json
@@ -357,7 +357,7 @@ Crea una nueva colección en Postman con los siguientes requests:
 
 ## 🔄 Diferencias entre Endpoints de Notificaciones
 
-### **Endpoint `/notify` - Notificaciones Directas**
+### **Endpoint `/v1/notifications` - Notificaciones Directas**
 
 **Uso recomendado:** Notificaciones simples y directas
 **Esquema:** Simple y directo
@@ -375,7 +375,7 @@ Crea una nueva colección en Postman con los siguientes requests:
 - ✅ Ideal para notificaciones básicas
 - ✅ Menos código para implementar
 
-### **Endpoint `/notify-multi` - Notificaciones Multi-Canal**
+### **Endpoint `/v1/notifications/multi` - Notificaciones Multi-Canal**
 
 **Uso recomendado:** Notificaciones complejas o múltiples canales
 **Esquema:** Complejo y flexible
@@ -570,12 +570,12 @@ docker system prune -a --volumes -f
 - ✅ `/v1/usuarios` - Registro de usuarios
 - ✅ `/v1/sesiones` - Login de usuarios  
 - ✅ `/v1/codigos` - Solicitud de cambio de contraseña
-- ✅ `/notify` - Notificaciones directas (email, sms, whatsapp, push)
-- ✅ `/notify-multi` - Notificaciones multi-canal (para casos complejos)
+- ✅ `/v1/notifications` - Notificaciones directas (email, sms, whatsapp, push)
+- ✅ `/v1/notifications/multi` - Notificaciones multi-canal (para casos complejos)
 
 **Diferencias entre endpoints:**
-- **`/notify`**: Esquema simple, ideal para notificaciones directas
-- **`/notify-multi`**: Esquema complejo, ideal para notificaciones múltiples o personalizadas
+- **`/v1/notifications`**: Esquema simple, ideal para notificaciones directas
+- **`/v1/notifications/multi`**: Esquema complejo, ideal para notificaciones múltiples o personalizadas
 
 **Flujo de datos verificado:**
 1. **Registro** → Genera evento `REGISTRO_USUARIO` → Email de confirmación

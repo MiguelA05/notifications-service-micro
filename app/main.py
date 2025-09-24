@@ -3,6 +3,7 @@ from fastapi import FastAPI, Body, HTTPException, Depends, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
+from typing import Optional
 import asyncio
 import logging
 import os
@@ -30,6 +31,12 @@ class NotifyPayload(BaseModel):
 
 
 app = FastAPI(title="notifications-service-micro", version="1.0.0")
+
+# Agregar prefijo de versión para todos los endpoints
+from fastapi import APIRouter
+
+# Crear router con prefijo de versión
+v1_router = APIRouter(prefix="/v1")
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +56,7 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/notify")
+@v1_router.post("/notifications")
 async def notify(payload: NotifyPayload = Body(...)) -> dict:
     try:
         await publish_message(routing_key="notifications.key", payload=payload.model_dump())
@@ -58,7 +65,7 @@ async def notify(payload: NotifyPayload = Body(...)) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post("/notify-multi")
+@v1_router.post("/notifications/multi")
 async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
     """Endpoint para enviar notificaciones por múltiples canales simultáneamente"""
     try:
@@ -79,7 +86,7 @@ async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-@app.post("/notify-auth")
+@v1_router.post("/notifications/auth")
 async def send_notification(payload: NotifyPayload, user_id: str = Depends(verify_token)):
     """Endpoint protegido que requiere autenticación JWT"""
     try:
@@ -89,7 +96,7 @@ async def send_notification(payload: NotifyPayload, user_id: str = Depends(verif
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post("/notify-multi-auth")
+@v1_router.post("/notifications/multi/auth")
 async def send_multi_notification(payload: MultiChannelNotification, user_id: str = Depends(verify_token)):
     """Endpoint protegido para enviar notificaciones por múltiples canales"""
     try:
@@ -249,3 +256,6 @@ async def whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error procesando webhook de WhatsApp: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+# Incluir el router versionado en la aplicación
+app.include_router(v1_router)
