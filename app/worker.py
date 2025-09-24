@@ -37,10 +37,12 @@ import json
 import asyncio
 import logging
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 import aio_pika
 from app.channels.factory import create_channel
-from app.models import NotificationChannel
+from app.models import NotificationChannel, Notification, NotificationStatus
+from app.db import SessionLocal
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -81,6 +83,80 @@ def _parse_channel(channel_value: Optional[str]) -> NotificationChannel:
     if value not in mapping:
         raise ValueError(f"Canal no soportado: {value}")
     return mapping[value]
+
+def _save_notification_to_db(
+    user_id: str,
+    channel: NotificationChannel,
+    destination: str,
+    message: str,
+    subject: Optional[str] = None,
+    status: NotificationStatus = NotificationStatus.PENDING
+) -> Optional[int]:
+    """Guarda una notificación en la base de datos"""
+    # Usar la variable de entorno DB_URL del worker
+    from app.db import create_engine, sessionmaker
+    from sqlalchemy.orm import Session
+    
+    db_url = os.getenv("DB_URL", "postgresql+psycopg2://notifications:notifications@postgres-notifications:5432/notifications")
+    engine = create_engine(db_url, pool_pre_ping=True)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    db = SessionLocal()
+    try:
+        notification = Notification(
+            user_id=user_id,
+            channel=channel,
+            destination=destination,
+            subject=subject,
+            message=message,
+            status=status,
+            created_at=datetime.utcnow()
+        )
+        db.add(notification)
+        db.commit()
+        db.refresh(notification)
+        return notification.id
+    except Exception as e:
+        logger.error(f"Error guardando notificación en BD: {e}")
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+def _update_notification_status(
+    notification_id: int,
+    status: NotificationStatus,
+    error_message: Optional[str] = None,
+    cost: Optional[str] = None
+) -> bool:
+    """Actualiza el estado de una notificación en la base de datos"""
+    # Usar la variable de entorno DB_URL del worker
+    from app.db import create_engine, sessionmaker
+    
+    db_url = os.getenv("DB_URL", "postgresql+psycopg2://notifications:notifications@postgres-notifications:5432/notifications")
+    engine = create_engine(db_url, pool_pre_ping=True)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    db = SessionLocal()
+    try:
+        notification = db.get(Notification, notification_id)
+        if notification:
+            notification.status = status
+            if status == NotificationStatus.SENT:
+                notification.sent_at = datetime.utcnow()
+            if error_message:
+                notification.error_message = error_message
+            if cost:
+                notification.cost = cost
+            db.commit()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error actualizando estado de notificación: {e}")
+        db.rollback()
+        return False
+    finally:
+        db.close()
 
 async def _declare_topology(channel: aio_pika.Channel) -> None:
     # Declara exchanges/colas necesarios (principal, reintentos y DLQ)
@@ -204,9 +280,35 @@ async def _process_single_channel(payload: Dict[str, Any]) -> None:
     destination = payload.get("destination")
     message = payload.get("message")
     subject = payload.get("subject")
+    user_id = payload.get("user_id", "system")
 
-    ch = create_channel(notification_channel)
-    await ch.send(destination=destination, message=message, subject=subject)
+    # Guardar notificación en BD antes de enviar
+    notification_id = _save_notification_to_db(
+        user_id=user_id,
+        channel=notification_channel,
+        destination=destination,
+        message=message,
+        subject=subject,
+        status=NotificationStatus.PENDING
+    )
+
+    if notification_id:
+        try:
+            ch = create_channel(notification_channel)
+            await ch.send(destination=destination, message=message, subject=subject)
+            
+            # Actualizar estado a enviado
+            _update_notification_status(notification_id, NotificationStatus.SENT)
+            logger.info(f"Notificación {notification_id} enviada exitosamente por {channel_value} a {destination}")
+            
+        except Exception as e:
+            # Actualizar estado a fallido
+            _update_notification_status(notification_id, NotificationStatus.FAILED, str(e))
+            logger.error(f"Error enviando notificación {notification_id}: {e}")
+            raise
+    else:
+        logger.error("No se pudo guardar la notificación en BD")
+        raise Exception("Error guardando notificación en BD")
 
 
 async def _process_multi_channel(payload: Dict[str, Any]) -> None:
@@ -215,6 +317,7 @@ async def _process_multi_channel(payload: Dict[str, Any]) -> None:
     message_dict = payload.get("message", {})
     subject = payload.get("subject")
     metadata = payload.get("metadata", {})
+    user_id = payload.get("user_id", "system")
 
     # Procesar cada canal que tenga tanto destino como mensaje
     for channel_name, destination_value in destination_dict.items():
@@ -223,10 +326,31 @@ async def _process_multi_channel(payload: Dict[str, Any]) -> None:
             if message_value:  # Solo procesar si hay mensaje
                 try:
                     notification_channel = _parse_channel(channel_name)
-                    ch = create_channel(notification_channel)
-                    await ch.send(destination=destination_value, message=message_value, subject=subject)
-                    logger.info(f"Mensaje enviado por {channel_name} a {destination_value}")
+                    
+                    # Guardar notificación en BD antes de enviar
+                    notification_id = _save_notification_to_db(
+                        user_id=user_id,
+                        channel=notification_channel,
+                        destination=destination_value,
+                        message=message_value,
+                        subject=subject,
+                        status=NotificationStatus.PENDING
+                    )
+                    
+                    if notification_id:
+                        ch = create_channel(notification_channel)
+                        await ch.send(destination=destination_value, message=message_value, subject=subject)
+                        
+                        # Actualizar estado a enviado
+                        _update_notification_status(notification_id, NotificationStatus.SENT)
+                        logger.info(f"Notificación {notification_id} enviada por {channel_name} a {destination_value}")
+                    else:
+                        logger.error(f"No se pudo guardar notificación para {channel_name}")
+                        
                 except Exception as exc:
+                    # Actualizar estado a fallido si hay notification_id
+                    if 'notification_id' in locals():
+                        _update_notification_status(notification_id, NotificationStatus.FAILED, str(exc))
                     logger.error(f"Error enviando por {channel_name} a {destination_value}: {exc}")
                     # Continuar con otros canales aunque uno falle
 
