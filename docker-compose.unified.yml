@@ -38,6 +38,8 @@ services:
       # definitions.json: usuarios, vhosts, exchanges, colas y bindings predefinidos
       - ./definitions.json:/etc/rabbitmq/definitions.json:ro
 
+
+
   postgres_notifications:
     image: postgres:16-alpine
     container_name: postgres-notifications
@@ -194,7 +196,7 @@ services:
       - "3000:3000"
 
   jenkins:
-    image: jenkins/jenkins:lts-jdk11-slim
+    image: jenkins/jenkins:lts
     container_name: jenkins
     restart: unless-stopped
     ports:
@@ -219,6 +221,12 @@ volumes:
   pgdata_domain:
   pgdata_orchestrator:
   jenkins_home:
+
+# Root network definition to satisfy services referencing 'ci_cd_network'
+networks:
+  ci_cd_network:
+    name: ci_cd_network
+    driver: bridge
 
 
 
