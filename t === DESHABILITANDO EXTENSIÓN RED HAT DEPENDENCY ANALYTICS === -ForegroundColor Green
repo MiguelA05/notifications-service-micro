@@ -1,0 +1,10 @@
+[33m762d5ae[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Update notification endpoints to use /v1 prefix
+[33m8560e74[m Add E2E guide, unified compose, and main API file
+[33md152791[m Update notification guide and payload schema
+[33m4fabbfb[m Expand E2E guide for notification microservices
+[33meda7cb7[m Update RabbitMQ config and remove legacy compose file
+[33m3e24031[m Add E2E guide and enhance docker-compose comments
+[33m2f4df5c[m Add orchestrator service and database to compose file
+[33maba01b4[m Add unified Docker Compose configuration
+[33m5c36294[m Update README.md
+[33mec3f595[m Update README.md
