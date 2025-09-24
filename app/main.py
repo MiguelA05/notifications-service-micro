@@ -1,12 +1,14 @@
 from app.channels.factory import create_channel
 from fastapi import FastAPI, Body, HTTPException, Depends, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional
 import asyncio
 import logging
 import os
+import json
 
 from .messaging import publish_message, setup_infrastructure
 from .db import get_db, create_tables, init_default_channels, init_default_user
@@ -28,9 +30,25 @@ class NotifyPayload(BaseModel):
     destination: str = Field(..., description="Destino del mensaje")
     message: str = Field(..., min_length=1, description="Mensaje a enviar")
     subject: Optional[str] = Field(None, description="Asunto (para email/push)")
+    
+    class Config:
+        # Configurar para manejar caracteres especiales correctamente
+        json_encoders = {
+            str: lambda v: v.encode('utf-8').decode('utf-8') if isinstance(v, str) else v
+        }
 
 
-app = FastAPI(title="notifications-service-micro", version="1.0.0")
+app = FastAPI(
+    title="notifications-service-micro", 
+    version="1.0.0",
+    # Configurar para manejar UTF-8 automáticamente
+    openapi_tags=[
+        {
+            "name": "notifications",
+            "description": "Endpoints para envío de notificaciones",
+        }
+    ]
+)
 
 # Agregar prefijo de versión para todos los endpoints
 from fastapi import APIRouter
@@ -38,6 +56,9 @@ from fastapi import APIRouter
 # Crear router con prefijo de versión
 v1_router = APIRouter(prefix="/v1")
 logger = logging.getLogger(__name__)
+
+
+# Configuración para manejar UTF-8 automáticamente
 
 
 @app.on_event("startup")
@@ -57,32 +78,78 @@ async def health() -> dict:
 
 
 @v1_router.post("/notifications")
-async def notify(payload: NotifyPayload = Body(...)) -> dict:
+async def notify(request: Request) -> dict:
     try:
-        await publish_message(routing_key="notifications.key", payload=payload.model_dump())
+        # Leer el body como bytes y decodificar con UTF-8
+        body_bytes = await request.body()
+        body_str = body_bytes.decode('utf-8', errors='ignore')
+        
+        # Parsear el JSON manualmente
+        import json
+        payload_dict = json.loads(body_str)
+        
+        # Validar que tenga los campos requeridos
+        required_fields = ['channel', 'destination', 'message']
+        for field in required_fields:
+            if field not in payload_dict:
+                raise HTTPException(status_code=400, detail=f"Campo requerido faltante: {field}")
+        
+        # Normalizar strings para manejar caracteres especiales
+        for key, value in payload_dict.items():
+            if isinstance(value, str):
+                # Normalizar el string para manejar caracteres especiales
+                payload_dict[key] = value.encode('utf-8', errors='ignore').decode('utf-8')
+        
+        await publish_message(routing_key="notifications.key", payload=payload_dict)
         return {"queued": True}
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"JSON inválido: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @v1_router.post("/notifications/multi")
-async def notify_multi(payload: MultiChannelNotification = Body(...)) -> dict:
+async def notify_multi(request: Request) -> dict:
     """Endpoint para enviar notificaciones por múltiples canales simultáneamente"""
     try:
-        # Convertir a formato compatible con el worker
-        worker_payload = {
-            "destination": payload.destination.model_dump(),
-            "message": payload.message.model_dump(),
-            "subject": payload.subject,
-            "metadata": payload.metadata
-        }
-        await publish_message(routing_key="notifications.key", payload=worker_payload)
+        # Leer el body como bytes y decodificar con UTF-8
+        body_bytes = await request.body()
+        body_str = body_bytes.decode('utf-8', errors='ignore')
+        
+        # Parsear el JSON manualmente
+        import json
+        payload_dict = json.loads(body_str)
+        
+        # Validar que tenga los campos requeridos
+        required_fields = ['destination', 'message']
+        for field in required_fields:
+            if field not in payload_dict:
+                raise HTTPException(status_code=400, detail=f"Campo requerido faltante: {field}")
+        
+        # Normalizar strings para manejar caracteres especiales
+        def normalize_strings(obj):
+            if isinstance(obj, dict):
+                return {k: normalize_strings(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [normalize_strings(item) for item in obj]
+            elif isinstance(obj, str):
+                return obj.encode('utf-8', errors='ignore').decode('utf-8')
+            else:
+                return obj
+        
+        payload_dict = normalize_strings(payload_dict)
+        
+        await publish_message(routing_key="notifications.key", payload=payload_dict)
         return {
             "queued": True, 
-            "channels": payload.destination.get_active_channels(),
-            "message_channels": payload.message.get_active_channels(),
             "message": "Notificación encolada para múltiples canales"
         }
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"JSON inválido: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
