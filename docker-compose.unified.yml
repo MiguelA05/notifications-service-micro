@@ -78,14 +78,8 @@ services:
     container_name: notifications-service-micro
     env_file:
       - .env
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres_notifications:
-        condition: service_healthy
-    ports:
-      - "8080:8080"
     environment:
+      TZ: America/Bogota
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: orchestrator_user
@@ -94,6 +88,13 @@ services:
       AMQP_EXCHANGE_TYPE: topic
       MESSAGING_DECLARE_INFRA: "false"
       DB_URL: postgresql+psycopg2://notifications:notifications@postgres-notifications:5432/notifications
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_notifications:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
 
   notifications-worker:
     build: .
@@ -101,6 +102,8 @@ services:
     command: python -m app.worker
     env_file:
       - .env
+    environment:
+      - TZ=America/Bogota
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -126,6 +129,7 @@ services:
     ports:
       - "8081:8080"
     environment:
+      TZ: America/Bogota
       DOCKER_COMPOSE_ENABLED: "true"
       DATASOURCE_URL: jdbc:postgresql://postgres-domain:5432/mydb
       DATASOURCE_USERNAME: user
@@ -182,6 +186,7 @@ services:
       orchestrator-db:
         condition: service_healthy
     environment:
+      TZ: America/Bogota
       PORT: 3000
       DATABASE_URL: postgresql://user:pass@postgres-orchestrator:5432/mydb?schema=public
       RABBITMQ_URL: amqp://orchestrator_user:orch_pass@rabbitmq:5672/foro
