@@ -193,10 +193,32 @@ services:
     ports:
       - "3000:3000"
 
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11-slim
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "8082:8080"   # Acceso a la interfaz web
+      - "50000:50000" # Puerto usado por agentes remotos
+    volumes:
+      - jenkins_home:/var/jenkins_home  # Persistencia de datos
+    networks:
+      - ci_cd_network
+
+  sonarqube:
+    image: sonarqube:lts
+    container_name: sonarqube
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    networks:
+      - ci_cd_network
+
 volumes:
   pgdata_notifications:
   pgdata_domain:
   pgdata_orchestrator:
+  jenkins_home:
 
 
 
