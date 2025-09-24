@@ -1,0 +1,197 @@
+services:
+  # Nombre del servicio dentro del archivo de Docker Compose
+  rabbitmq:
+    # Imagen de RabbitMQ con el plugin de panel de administración incluido
+    image: rabbitmq:3-management
+    # Nombre fijo del contenedor para referenciarlo fácilmente desde otros servicios o comandos
+    container_name: rabbitmq
+    # Mapeo de puertos del host al contenedor
+    ports:
+      # Puerto AMQP (host:contenedor) usado por los clientes (app/worker/orquestador)
+      - "5672:5672"
+      # Puerto de la consola web de administración (http://localhost:15672)
+      - "15672:15672"
+    # Variables de entorno para inicializar usuario/vhost por defecto
+    environment:
+      # Usuario administrador inicial del broker
+      RABBITMQ_DEFAULT_USER: admin
+      # Contraseña del usuario administrador
+      RABBITMQ_DEFAULT_PASS: admin_pass
+      # Virtual host por defecto donde se crean exchanges/colas/bindings
+      RABBITMQ_DEFAULT_VHOST: foro
+    # Comprobación de salud para esperar a que RabbitMQ esté listo antes de depender de él
+    healthcheck:
+      # Diagnóstico oficial que valida conectividad de puertos internos del broker
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      # Intervalo entre chequeos de salud
+      interval: 10s
+      # Tiempo máximo permitido por cada chequeo
+      timeout: 5s
+      # Número de reintentos antes de marcar el servicio como unhealthy
+      retries: 5
+      # Tiempo de gracia inicial antes de comenzar a chequear (útil para el arranque)
+      start_period: 30s
+    # Montaje de archivos de configuración/definiciones en modo solo lectura
+    volumes:
+      # rabbitmq.conf: configuración del broker (listeners, vhosts, políticas, etc.)
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      # definitions.json: usuarios, vhosts, exchanges, colas y bindings predefinidos
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
+
+  postgres_notifications:
+    image: postgres:16-alpine
+    container_name: postgres-notifications
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notifications
+      POSTGRES_PASSWORD: notifications
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_notifications:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifications -d notifications"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres_domain:
+    image: postgres:16-alpine
+    container_name: postgres-domain
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_domain:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  notifications-api:
+    build:
+      context: .
+    container_name: notifications-service-micro
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_notifications:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: orchestrator_user
+      RABBITMQ_PASSWORD: orch_pass
+      AMQP_EXCHANGE: orquestador.events
+      AMQP_EXCHANGE_TYPE: topic
+      MESSAGING_DECLARE_INFRA: "false"
+      DB_URL: postgresql+psycopg2://notifications:notifications@postgres-notifications:5432/notifications
+
+  notifications-worker:
+    build: .
+    container_name: notifications-worker
+    command: python -m app.worker
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_notifications:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notifications-scheduler:
+    build: .
+    container_name: notifications-scheduler
+    command: python -m app.scheduler
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  domain-service:
+    build:
+      context: ../jwtmanual-taller1-micro
+    container_name: jwtmanual-taller1-micro
+    ports:
+      - "8081:8080"
+    environment:
+      DOCKER_COMPOSE_ENABLED: "true"
+      DATASOURCE_URL: jdbc:postgresql://postgres-domain:5432/mydb
+      DATASOURCE_USERNAME: user
+      DATASOURCE_PASSWORD: pass
+      FLYWAY_ENABLED: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      HIBERNATE_SQL_LOG: INFO
+      HIBERNATE_BINDER_LOG: INFO
+      APP_LOG_LEVEL: INFO
+      JWT_SECRET: secretsecretsecretsecretsecretsecretsecretsecret
+      JWT_EXPIRATION: "3600"
+      JWT_ISSUER: ingesis.uniquindio.edu.co
+      # RabbitMQ
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: orchestrator_user
+      SPRING_RABBITMQ_PASSWORD: orch_pass
+      SPRING_RABBITMQ_VIRTUAL_HOST: foro
+      # Depuracion y confirms de publicacion
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_AMQP: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_RABBIT: DEBUG
+      SPRING_RABBITMQ_PUBLISHER_CONFIRM_TYPE: simple
+      SPRING_RABBITMQ_PUBLISHER_RETURNS: "true"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_domain:
+        condition: service_healthy
+
+  orchestrator-db:
+    image: postgres:16-alpine
+    container_name: postgres-orchestrator
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_orchestrator:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orchestrator-service:
+    build:
+      context: ../orquestador-solicitudes-micro
+    container_name: orquestador-solicitudes-micro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      orchestrator-db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://user:pass@postgres-orchestrator:5432/mydb?schema=public
+      RABBITMQ_URL: amqp://orchestrator_user:orch_pass@rabbitmq:5672/foro
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata_notifications:
+  pgdata_domain:
+  pgdata_orchestrator:
+
+
+
