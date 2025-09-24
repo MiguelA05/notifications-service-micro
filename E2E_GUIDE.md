@@ -1,137 +1,460 @@
-## Guía E2E: Trazabilidad entre Dominio, Orquestador y Notificaciones
+# Guía E2E: Sistema de Microservicios de Notificaciones
 
-Esta guía muestra cómo levantar el stack unificado, realizar registro y login en el servicio de dominio y verificar que:
-- El orquestador procese los eventos y publique a `notifications.queue`.
-- El worker de notificaciones envíe email y SMS.
+Esta guía te permitirá probar completamente el sistema de microservicios de notificaciones, desde el registro de usuarios hasta la entrega de notificaciones por email y SMS.
 
-Destinos para las pruebas:
-- Email: miraortega2020@gmail.com
-- SMS: +573225035863
+## 📋 Tabla de Contenidos
 
-### 1) Requisitos
-- Docker Desktop en ejecución
-- PowerShell (Windows)
+1. [Requisitos Previos](#requisitos-previos)
+2. [Configuración del Entorno](#configuración-del-entorno)
+3. [Verificación de Servicios](#verificación-de-servicios)
+4. [Pruebas de Endpoints](#pruebas-de-endpoints)
+5. [Verificación de Notificaciones](#verificación-de-notificaciones)
+6. [Pruebas con Postman](#pruebas-con-postman)
+7. [Solución de Problemas](#solución-de-problemas)
+8. [Limpieza del Entorno](#limpieza-del-entorno)
 
-### 2) Levantar el stack unificado
-Ejecuta en el directorio `notifications-service-micro`:
+---
+
+## 🛠️ Requisitos Previos
+
+- **Docker Desktop** instalado y ejecutándose
+- **PowerShell** (Windows) o **Terminal** (Linux/Mac)
+- **Postman** (opcional, para pruebas GUI)
+- **Navegador web** para verificar RabbitMQ Management
+
+---
+
+## 🚀 Configuración del Entorno
+
+### Paso 1: Preparar el Entorno
 
 ```powershell
-# Construir imágenes
-docker compose -f docker-compose.unified.yml build
+# Navegar al directorio del proyecto
+cd C:\Users\mirao\OneDrive\Documentos\GitHub\notifications-service-micro
 
-# Levantar servicios clave (ajusta si ya están arriba)
-$services = @(
-  'rabbitmq','postgres_notifications','postgres_domain','orchestrator-db',
-  'notifications-api','notifications-worker','domain-service','orchestrator-service'
-)
-docker compose -f docker-compose.unified.yml up -d $services
-
-# Verificar estado
-docker compose -f docker-compose.unified.yml ps
+# Limpiar contenedores y volúmenes existentes (opcional)
+docker-compose -f docker-compose.unified.yml down --volumes --remove-orphans
+docker system prune -a --volumes -f
 ```
 
-### 3) Health de notificaciones API
+### Paso 2: Construir y Levantar Servicios
+
 ```powershell
-Invoke-RestMethod -Method GET -Uri http://localhost:8080/health | ConvertTo-Json -Depth 4
-```
-Esperado: `{ "status": "ok" }`.
+# Construir todas las imágenes
+docker-compose -f docker-compose.unified.yml build --no-cache
 
-### 4) Registrar usuario en Dominio
-Usa un usuario aleatorio para evitar conflictos:
-```powershell
-$u = "trace_" + ([guid]::NewGuid().ToString('N').Substring(0,8))
-$register = @{ usuario=$u; correo=($u+"@example.com"); clave="demo123"; numeroTelefono="+573225035863" } |
-  ConvertTo-Json -Compress
-Invoke-RestMethod -Method POST -Uri http://localhost:8081/v1/usuarios -ContentType 'application/json' -Body $register
-```
-Esperado: 201 Created. En logs del dominio: publicación de `REGISTRO_USUARIO` (`auth.registered`).
+# Levantar todos los servicios
+docker-compose -f docker-compose.unified.yml up -d
 
-### 5) Login en Dominio
-```powershell
-$login = @{ usuario=$u; clave="demo123" } | ConvertTo-Json -Compress
-Invoke-RestMethod -Method POST -Uri http://localhost:8081/v1/sesiones -ContentType 'application/json' -Body $login |
-  ConvertTo-Json -Depth 4
-```
-Esperado: 200 OK con token. En logs del dominio: publicación de `AUTENTICACION` (`auth.login`).
-
-### 6) Verificar logs
-- Orquestador:
-```powershell
-docker logs --since=5m orquestador-solicitudes-micro
-```
-Debe mostrar recepción de eventos y publicación a `notifications.queue` (HTML para email y texto SMS).
-
-- Worker de notificaciones:
-```powershell
-docker logs --since=5m notifications-worker
-```
-Debe mostrar envíos:
-- Email enviado (para paso 7 se usa `miraortega2020@gmail.com`).
-- SMS a `+573225035863` con código 201 de Twilio.
-
-### 7) Disparar eventos manualmente (opcional, via RabbitMQ HTTP API)
-```powershell
-$pair = "admin:admin_pass"
-$b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
-$headers = @{ Authorization = "Basic $b64"; "Content-Type" = "application/json" }
-
-# REGISTRO_USUARIO con email real
-$inner = @{ usuario = "e2e_user"; correo = "miraortega2020@gmail.com"; numeroTelefono = "+573225035863"; codigo = $null; fecha = (Get-Date -Format o) } |
-  ConvertTo-Json -Compress
-$payload = @{ id = "evt-" + [guid]::NewGuid().ToString(); tipoAccion = "REGISTRO_USUARIO"; timestamp = (Get-Date -Format o); payload = (ConvertFrom-Json $inner) } |
-  ConvertTo-Json -Compress
-$body = @{ properties = @{}; routing_key = "auth.registered"; payload = $payload; payload_encoding = "string" } |
-  ConvertTo-Json -Compress
-Invoke-RestMethod -Method POST -Uri "http://localhost:15672/api/exchanges/foro/dominio.events/publish" -Headers $headers -Body $body |
-  ConvertTo-Json -Depth 4
-
-# AUTENTICACION (login)
-$inner2 = @{ usuario = "e2e_user"; correo = "miraortega2020@gmail.com"; numeroTelefono = "+573225035863"; fecha = (Get-Date -Format o) } |
-  ConvertTo-Json -Compress
-$payload2 = @{ id = "evt-" + [guid]::NewGuid().ToString(); tipoAccion = "AUTENTICACION"; timestamp = (Get-Date -Format o); payload = (ConvertFrom-Json $inner2) } |
-  ConvertTo-Json -Compress
-$body2 = @{ properties = @{}; routing_key = "auth.login"; payload = $payload2; payload_encoding = "string" } |
-  ConvertTo-Json -Compress
-Invoke-RestMethod -Method POST -Uri "http://localhost:15672/api/exchanges/foro/dominio.events/publish" -Headers $headers -Body $body2 |
-  ConvertTo-Json -Depth 4
+# Verificar que todos los servicios estén funcionando
+docker-compose -f docker-compose.unified.yml ps
 ```
 
-### 8) Verificar persistencia en BD
-Recomendado: psql interactivo para evitar problemas de comillas en PowerShell.
+**✅ Resultado Esperado:** Todos los servicios deben mostrar estado "Up" y "healthy" para las bases de datos.
 
-Orquestador:
+---
+
+## 🔍 Verificación de Servicios
+
+### Verificar Health Checks
+
 ```powershell
+# Servicio de Notificaciones (Puerto 8080)
+Invoke-WebRequest -Uri "http://localhost:8080/health" -UseBasicParsing
+
+# Servicio de Dominio (Puerto 8081)
+Invoke-WebRequest -Uri "http://localhost:8081/v1/usuarios" -Method GET -UseBasicParsing
+
+# Orquestador (Puerto 3000)
+Invoke-WebRequest -Uri "http://localhost:3000/health" -UseBasicParsing
+
+# RabbitMQ Management (Puerto 15672)
+# Abrir en navegador: http://localhost:15672
+# Usuario: admin, Contraseña: admin_pass
+```
+
+**✅ Resultado Esperado:** 
+- Notificaciones: `{"status":"ok"}`
+- Dominio: Error 401 (esperado, requiere autenticación)
+- Orquestador: `{"ok":true}`
+- RabbitMQ: Interfaz web accesible
+
+---
+
+## 🧪 Pruebas de Endpoints
+
+### Prueba 1: Registro de Usuario
+
+**Objetivo:** Crear un nuevo usuario y verificar que se genere una notificación de confirmación por email.
+
+```powershell
+# Generar datos únicos para evitar conflictos
+$timestamp = Get-Date -Format 'yyyyMMddHHmmss'
+$usuario = "testuser_$timestamp"
+$correo = "test$timestamp@example.com"
+
+# Crear payload de registro
+$body = @{
+    usuario = $usuario
+    correo = $correo
+    numeroTelefono = "+573225035863"
+    clave = "TestPassword123!"
+} | ConvertTo-Json
+
+# Ejecutar registro
+Write-Host "Registrando usuario: $usuario" -ForegroundColor Green
+$response = Invoke-WebRequest -Uri "http://localhost:8081/v1/usuarios" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+
+# Mostrar resultado
+Write-Host "Status: $($response.StatusCode)" -ForegroundColor Yellow
+Write-Host "Response: $($response.Content)" -ForegroundColor Cyan
+```
+
+**✅ Resultado Esperado:** 
+- Status Code: 201
+- Response: `{"error":false,"respuesta":"Usuario registrado exitosamente"}`
+
+### Prueba 2: Login de Usuario
+
+**Objetivo:** Autenticar el usuario y verificar que se generen notificaciones múltiples (email + SMS).
+
+```powershell
+# Crear payload de login
+$loginBody = @{
+    usuario = $usuario
+    clave = "TestPassword123!"
+} | ConvertTo-Json
+
+# Ejecutar login
+Write-Host "Iniciando sesión con usuario: $usuario" -ForegroundColor Green
+$loginResponse = Invoke-WebRequest -Uri "http://localhost:8081/v1/sesiones" -Method POST -Body $loginBody -ContentType "application/json" -UseBasicParsing
+
+# Mostrar resultado
+Write-Host "Status: $($loginResponse.StatusCode)" -ForegroundColor Yellow
+$tokenData = $loginResponse.Content | ConvertFrom-Json
+Write-Host "Token generado: $($tokenData.respuesta.token.Substring(0,50))..." -ForegroundColor Cyan
+```
+
+**✅ Resultado Esperado:** 
+- Status Code: 200
+- Response: Token JWT válido
+
+### Prueba 3: Solicitud de Cambio de Contraseña
+
+**Objetivo:** Solicitar cambio de contraseña y verificar que se genere una notificación con código de verificación.
+
+```powershell
+# Crear payload para solicitud de código
+$codigoBody = @{
+    usuario = $usuario
+} | ConvertTo-Json
+
+# Ejecutar solicitud
+Write-Host "Solicitando código de cambio de contraseña para: $usuario" -ForegroundColor Green
+$codigoResponse = Invoke-WebRequest -Uri "http://localhost:8081/v1/codigos" -Method POST -Body $codigoBody -ContentType "application/json" -UseBasicParsing
+
+# Mostrar resultado
+Write-Host "Status: $($codigoResponse.StatusCode)" -ForegroundColor Yellow
+Write-Host "Response: $($codigoResponse.Content)" -ForegroundColor Cyan
+```
+
+**✅ Resultado Esperado:** 
+- Status Code: 200
+- Response: `{"error":false,"respuesta":"Código de verificación enviado exitosamente al correo"}`
+
+### Prueba 4: Notificaciones Directas (API de Notificaciones)
+
+**Objetivo:** Probar el envío directo de notificaciones a través de la API.
+
+```powershell
+# Notificación por Email
+$emailBody = @{
+    channel = "email"
+    destination = "miraortega2020@gmail.com"
+    message = "Test de notificación directa por email"
+    subject = "Test Directo - Email"
+} | ConvertTo-Json
+
+Write-Host "Enviando notificación por email..." -ForegroundColor Green
+$emailResponse = Invoke-WebRequest -Uri "http://localhost:8080/notify" -Method POST -Body $emailBody -ContentType "application/json" -UseBasicParsing
+Write-Host "Email Status: $($emailResponse.StatusCode)" -ForegroundColor Yellow
+
+# Notificación por SMS
+$smsBody = @{
+    channel = "sms"
+    destination = "+573225035863"
+    message = "Test de notificación directa por SMS"
+} | ConvertTo-Json
+
+Write-Host "Enviando notificación por SMS..." -ForegroundColor Green
+$smsResponse = Invoke-WebRequest -Uri "http://localhost:8080/notify" -Method POST -Body $smsBody -ContentType "application/json" -UseBasicParsing
+Write-Host "SMS Status: $($smsResponse.StatusCode)" -ForegroundColor Yellow
+```
+
+**✅ Resultado Esperado:** 
+- Status Code: 200 para ambos
+- Response: `{"queued":true}`
+
+---
+
+## 📧 Verificación de Notificaciones
+
+### Verificar Logs del Orquestador
+
+```powershell
+# Ver logs del orquestador (últimos 20 registros)
+Write-Host "=== LOGS DEL ORQUESTADOR ===" -ForegroundColor Magenta
+docker logs orquestador-solicitudes-micro --tail 20
+```
+
+**✅ Buscar en los logs:**
+- `📤 Mensaje enviado a notifications.queue`
+- Estructura JSON con `destination` y `message`
+- Templates HTML para email y texto para SMS
+
+### Verificar Logs del Worker de Notificaciones
+
+```powershell
+# Ver logs del worker (últimos 20 registros)
+Write-Host "=== LOGS DEL WORKER ===" -ForegroundColor Magenta
+docker logs notifications-worker --tail 20
+```
+
+**✅ Buscar en los logs:**
+- `Email enviado a [email] con asunto [subject] via SMTP`
+- `SMS enviado exitosamente. SID: [SID]`
+- `Mensaje procesado correctamente`
+
+### Verificar Logs del Servicio de Dominio
+
+```powershell
+# Ver logs del dominio (últimos 15 registros)
+Write-Host "=== LOGS DEL DOMINIO ===" -ForegroundColor Magenta
+docker logs jwtmanual-taller1-micro --tail 15
+```
+
+**✅ Buscar en los logs:**
+- `Publicando evento: EventoDominio`
+- `Routing key a usar: [routing_key]`
+- `El evento fue publicado`
+
+---
+
+## 📮 Pruebas con Postman
+
+### Colección de Postman
+
+Crea una nueva colección en Postman con los siguientes requests:
+
+#### 1. Health Check - Notificaciones
+- **Method:** GET
+- **URL:** `http://localhost:8080/health`
+- **Expected:** `{"status":"ok"}`
+
+#### 2. Health Check - Orquestador
+- **Method:** GET
+- **URL:** `http://localhost:3000/health`
+- **Expected:** `{"ok":true}`
+
+#### 3. Registro de Usuario
+- **Method:** POST
+- **URL:** `http://localhost:8081/v1/usuarios`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "usuario": "testuser_postman",
+    "correo": "test@example.com",
+    "numeroTelefono": "+573225035863",
+    "clave": "TestPassword123!"
+}
+```
+
+#### 4. Login de Usuario
+- **Method:** POST
+- **URL:** `http://localhost:8081/v1/sesiones`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "usuario": "testuser_postman",
+    "clave": "TestPassword123!"
+}
+```
+
+#### 5. Solicitud de Código
+- **Method:** POST
+- **URL:** `http://localhost:8081/v1/codigos`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "usuario": "testuser_postman"
+}
+```
+
+#### 6. Notificación Directa - Email
+- **Method:** POST
+- **URL:** `http://localhost:8080/notify`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "channel": "email",
+    "destination": "miraortega2020@gmail.com",
+    "message": "Test desde Postman - Email",
+    "subject": "Test Postman"
+}
+```
+
+#### 7. Notificación Directa - SMS
+- **Method:** POST
+- **URL:** `http://localhost:8080/notify`
+- **Headers:** `Content-Type: application/json`
+- **Body (JSON):**
+```json
+{
+    "channel": "sms",
+    "destination": "+573225035863",
+    "message": "Test desde Postman - SMS"
+}
+```
+
+---
+
+## 🔧 Verificación de Base de Datos
+
+### Verificar Eventos en Orquestador
+
+```powershell
+# Conectar a la base de datos del orquestador
 docker exec -it postgres-orchestrator psql -U user -d mydb
--- dentro de psql
-SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema='public';
-SELECT id, tipoAccion, usuario, correo, timestamp FROM "Evento" ORDER BY timestamp DESC LIMIT 5;
+
+# Dentro de psql, ejecutar:
+SELECT id, tipoAccion, usuario, correo, timestamp 
+FROM "Evento" 
+ORDER BY timestamp DESC 
+LIMIT 5;
+
+# Salir de psql
 \q
 ```
 
-Notificaciones:
+### Verificar Notificaciones
+
 ```powershell
+# Conectar a la base de datos de notificaciones
 docker exec -it postgres-notifications psql -U notifications -d notifications
--- dentro de psql
-\dt
-SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5;
+
+# Dentro de psql, ejecutar:
+SELECT * FROM notifications 
+ORDER BY created_at DESC 
+LIMIT 5;
+
+# Salir de psql
 \q
 ```
 
-Alternativa no interactiva (orquestador):
+---
+
+## 🐛 Solución de Problemas
+
+### Problema: Error 500 en Registro
+**Síntoma:** El servicio de dominio devuelve error 500
+**Solución:**
 ```powershell
-docker exec -i postgres-orchestrator sh -lc "cat <<'SQL' | psql -U user -d mydb
-SELECT id, tipoAccion, usuario, correo, timestamp FROM \"Evento\" ORDER BY timestamp DESC LIMIT 5;
-SQL"
+# Verificar logs del dominio
+docker logs jwtmanual-taller1-micro --tail 10
+
+# Si hay error de tabla faltante, ejecutar migraciones
+docker exec orquestador-solicitudes-micro npx prisma db push --accept-data-loss
 ```
 
-### 9) Problemas comunes
-- Evita pipes ("| cat") y "&&" en PowerShell; ejecuta comandos por separado.
-- Si el dominio devuelve 500/403/409 tras un reset de BD, espera unos segundos (Hibernate crea/actualiza el esquema) y reintenta.
-- Si el worker no conecta a RabbitMQ, espera a que `rabbitmq` esté healthy y reinicia el worker.
-
-### 10) Apagar el stack
+### Problema: Notificaciones no se envían
+**Síntoma:** Los logs del worker no muestran envíos
+**Solución:**
 ```powershell
-docker compose -f docker-compose.unified.yml down --remove-orphans
+# Verificar conexión a RabbitMQ
+docker logs notifications-worker --tail 10
+
+# Reiniciar worker si es necesario
+docker-compose -f docker-compose.unified.yml restart notifications-worker
 ```
 
-Con esto deberías lograr un flujo satisfactorio: dominio publica eventos, orquestador los procesa y el worker envía email a `miraortega2020@gmail.com` y SMS a `+573225035863`. 
+### Problema: Error de parsing en API de notificaciones
+**Síntoma:** Error 400/422 en endpoints de notificaciones
+**Solución:**
+```powershell
+# Reiniciar servicio de notificaciones
+docker-compose -f docker-compose.unified.yml restart notifications-api
+
+# Esperar 5 segundos y probar nuevamente
+Start-Sleep -Seconds 5
+```
+
+### Problema: SMS no se entrega
+**Síntoma:** Error en logs de Twilio
+**Solución:**
+- Verificar credenciales de Twilio en variables de entorno
+- Verificar que el número de teléfono tenga formato internacional (+57...)
+- Revisar logs de Twilio para códigos de error específicos
+
+---
+
+## 🧹 Limpieza del Entorno
+
+### Parar Servicios
+
+```powershell
+# Parar todos los servicios
+docker-compose -f docker-compose.unified.yml down
+
+# Parar y eliminar volúmenes (opcional)
+docker-compose -f docker-compose.unified.yml down --volumes --remove-orphans
+```
+
+### Limpieza Completa
+
+```powershell
+# Eliminar todas las imágenes y contenedores (CUIDADO: elimina todo)
+docker system prune -a --volumes -f
+```
+
+---
+
+## 📊 Flujo de Datos Esperado
+
+```
+1. Usuario → Dominio Service (Spring Boot:8081)
+2. Dominio → RabbitMQ (Exchange: dominio.events)
+3. RabbitMQ → Orquestador (Node.js:3000)
+4. Orquestador → RabbitMQ (Queue: notifications.queue)
+5. RabbitMQ → Worker (Python)
+6. Worker → SMTP/Twilio → Usuario Final
+```
+
+## ✅ Checklist de Verificación
+
+- [ ] Todos los servicios están "Up" y "healthy"
+- [ ] Health checks responden correctamente
+- [ ] Registro de usuario devuelve 201
+- [ ] Login devuelve 200 con token
+- [ ] Solicitud de código devuelve 200
+- [ ] Logs del orquestador muestran procesamiento de eventos
+- [ ] Logs del worker muestran envío de notificaciones
+- [ ] Email llega a miraortega2020@gmail.com
+- [ ] SMS llega a +573225035863
+- [ ] Base de datos contiene registros de eventos
+
+---
+
+## 📞 Contacto y Soporte
+
+Si encuentras problemas durante las pruebas:
+
+1. **Revisa los logs** de cada servicio
+2. **Verifica la conectividad** entre servicios
+3. **Confirma las credenciales** de servicios externos (Twilio, SMTP)
+4. **Revisa el estado** de RabbitMQ en la interfaz web
+
+**¡El sistema está diseñado para ser robusto y confiable!** 🚀
