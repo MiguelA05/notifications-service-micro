@@ -196,31 +196,61 @@ services:
       - "3000:3000"
 
   jenkins:
-    image: jenkins/jenkins:lts
+    build: ../cicdjenkins/jenkins
     container_name: jenkins
-    restart: unless-stopped
     ports:
-      - "8082:8080"   # Acceso a la interfaz web
-      - "50000:50000" # Puerto usado por agentes remotos
+      - "8083:8080"
+      - "50000:50000"
     volumes:
-      - jenkins_home:/var/jenkins_home  # Persistencia de datos
-    networks:
-      - ci_cd_network
+      - jenkins_home:/var/jenkins_home
+      - ../cicdjenkins/jenkins/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+      - ../cicdjenkins/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      # opcional: cache .m2 si usas agente docker local
+      - ~/.m2:/var/jenkins_home/.m2
+    environment:
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - SONAR_AUTH_TOKEN=admin123456789
+      - SONAR_HOST_URL=http://sonarqube:9000
+    depends_on:
+      - sonar
 
-  sonarqube:
-    image: sonarqube:lts
+  sonar:
+    image: sonarqube:9.9-community
     container_name: sonarqube
-    restart: unless-stopped
     ports:
-      - "9000:9000"
-    networks:
-      - ci_cd_network
+      - "9001:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+      - SONAR_JDBC_URL=jdbc:postgresql://db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    container_name: postgres-sonar
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - postgresql:/var/lib/postgresql
 
 volumes:
   pgdata_notifications:
   pgdata_domain:
   pgdata_orchestrator:
   jenkins_home:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  postgresql:
 
 # Root network definition to satisfy services referencing 'ci_cd_network'
 networks:
