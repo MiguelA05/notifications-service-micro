@@ -5,6 +5,8 @@ services:
     image: rabbitmq:3-management
     # Nombre fijo del contenedor para referenciarlo fácilmente desde otros servicios o comandos
     container_name: rabbitmq
+    # Configuración de usuario para Podman
+    user: "999:999"
     # Mapeo de puertos del host al contenedor
     ports:
       # Puerto AMQP (host:contenedor) usado por los clientes (app/worker/orquestador)
@@ -34,9 +36,9 @@ services:
     # Montaje de archivos de configuración/definiciones en modo solo lectura
     volumes:
       # rabbitmq.conf: configuración del broker (listeners, vhosts, políticas, etc.)
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro,Z
       # definitions.json: usuarios, vhosts, exchanges, colas y bindings predefinidos
-      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro,Z
 
 
 
@@ -203,12 +205,10 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
-      - ../cicdjenkins/jenkins/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
-      - ../cicdjenkins/jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
       # opcional: cache .m2 si usas agente docker local
       - ~/.m2:/var/jenkins_home/.m2
     environment:
-      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+      - CASC_JENKINS_CONFIG=/usr/share/jenkins/ref/casc_configs/jenkins.yaml
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
       - SONAR_AUTH_TOKEN=admin123456789
       - SONAR_HOST_URL=http://sonarqube:9000
