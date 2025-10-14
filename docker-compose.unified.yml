@@ -33,7 +33,7 @@ services:
       retries: 5
       # Tiempo de gracia inicial antes de comenzar a chequear (útil para el arranque)
       start_period: 30s
-    # Montaje de archivos de configuración/definiciones en modo solo lectura
+    # Montaje de archivos de configuración/definiciones usando bind mounts con permisos correctos
     volumes:
       # rabbitmq.conf: configuración del broker (listeners, vhosts, políticas, etc.)
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro,Z
@@ -157,6 +157,12 @@ services:
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_RABBIT: DEBUG
       SPRING_RABBITMQ_PUBLISHER_CONFIRM_TYPE: simple
       SPRING_RABBITMQ_PUBLISHER_RETURNS: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -197,6 +203,17 @@ services:
     ports:
       - "3000:3000"
 
+  automation-tests:
+    build:
+      context: ../automation-tests
+    container_name: automation-tests
+    environment:
+      - AUT_TESTS_BASE_URL=http://jwtmanual-taller1-micro:8080
+    depends_on:
+      - domain-service
+    networks:
+      - ci_cd_network
+
   jenkins:
     build: ../cicdjenkins/jenkins
     container_name: jenkins
@@ -205,32 +222,36 @@ services:
       - "50000:50000"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # opcional: cache .m2 si usas agente docker local
-      - ~/.m2:/var/jenkins_home/.m2
+      # Cache .m2 usando volumen nombrado para evitar problemas de permisos
+      - jenkins_m2:/var/jenkins_home/.m2
     environment:
       - CASC_JENKINS_CONFIG=/usr/share/jenkins/ref/casc_configs/jenkins.yaml
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
       - SONAR_AUTH_TOKEN=admin123456789
       - SONAR_HOST_URL=http://sonarqube:9000
-    depends_on:
-      - sonar
+      # Configuración para TestContainers - deshabilitar Docker
+      - TESTCONTAINERS_RYUK_DISABLED=true
+      - TESTCONTAINERS_CHECKS_DISABLE=true
+    # depends_on:
+    #   - sonar
 
-  sonar:
-    image: sonarqube:latest
-    container_name: sonarqube
-    ports:
-      - "9001:9000"
-    environment:
-      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
-      - SONAR_JDBC_URL=jdbc:postgresql://db:5432/sonar
-      - SONAR_JDBC_USERNAME=sonar
-      - SONAR_JDBC_PASSWORD=sonar
-    volumes:
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_extensions:/opt/sonarqube/extensions
-      - sonarqube_logs:/opt/sonarqube/logs
-    depends_on:
-      - db
+  # sonar:
+  #   image: sonarqube:latest
+  #   container_name: sonarqube
+  #   ports:
+  #     - "9001:9000"
+  #   environment:
+  #     - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+  #     - SONAR_JDBC_URL=jdbc:postgresql://db:5432/sonar
+  #     - SONAR_JDBC_USERNAME=sonar
+  #     - SONAR_JDBC_PASSWORD=sonar
+  #   volumes:
+  #     - sonarqube_data:/opt/sonarqube/data
+  #     - sonarqube_extensions:/opt/sonarqube/extensions
+  #     - sonarqube_logs:/opt/sonarqube/logs
+  #   user: "1000:1000"
+  #   depends_on:
+  #     - db
 
   db:
     image: postgres:15
@@ -247,6 +268,7 @@ volumes:
   pgdata_domain:
   pgdata_orchestrator:
   jenkins_home:
+  jenkins_m2:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:

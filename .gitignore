@@ -86,3 +86,7 @@ logs/
 .DS_Store
 Thumbs.db
 
+### Test Reports ###
+test-reports/
+/tmp/jenkins-e2e-reports/
+
