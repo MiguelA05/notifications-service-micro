@@ -7,6 +7,16 @@ from pydantic import BaseModel, Field
 from typing import Optional
 import asyncio
 import logging
+import structlog
+import importlib
+
+def try_configure_logging(service_name: str, env: str = "dev") -> None:
+    try:
+        logging_config = importlib.import_module("app.logging_config")
+        getattr(logging_config, "configure_logging")(service_name=service_name, env=env)
+    except Exception:
+        import sys
+        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 import os
 import json
 
@@ -55,7 +65,8 @@ from fastapi import APIRouter
 
 # Crear router con prefijo de versión
 v1_router = APIRouter(prefix="/v1")
-logger = logging.getLogger(__name__)
+try_configure_logging(service_name="notifications-service-micro", env=os.getenv("ENV","dev"))
+log: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 
 # Configuración para manejar UTF-8 automáticamente
@@ -321,8 +332,28 @@ async def whatsapp_webhook(request: Request):
         return {"status": "success", "data": response}
         
     except Exception as e:
-        logger.error(f"Error procesando webhook de WhatsApp: {str(e)}")
+        log.error("whatsapp_webhook_error", error=str(e))
         return {"status": "error", "message": str(e)}
+
+@app.middleware("http")
+async def add_request_context(request: Request, call_next):
+    # Correlación simple por request
+    request_id = request.headers.get("x-request-id") or os.urandom(6).hex()
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id, path=str(request.url.path), method=request.method)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        structlog.contextvars.clear_contextvars()
+
+@app.on_event("startup")
+async def startup():
+    log.info("service_started")
+
+@app.on_event("shutdown")
+async def shutdown():
+    log.info("service_stopped")
 
 # Incluir el router versionado en la aplicación
 app.include_router(v1_router)

@@ -90,3 +90,5 @@ Thumbs.db
 test-reports/
 /tmp/jenkins-e2e-reports/
 
+node_modules/
+
