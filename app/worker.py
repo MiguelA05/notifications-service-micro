@@ -232,13 +232,8 @@ async def _publish_to_retry(channel: aio_pika.Channel, retry_index: int, payload
     await main_exchange.publish(msg, routing_key=ROUTING_KEY)
 
 async def _publish_to_dlq(channel: aio_pika.Channel, payload: Dict[str, Any], headers: Dict[str, Any]) -> None:
-    # Envía el mensaje definitivamente fallido a la DLQ (nombre/tipo configurables)
-    dlx_type = {
-        "fanout": aio_pika.ExchangeType.FANOUT,
-        "topic": aio_pika.ExchangeType.TOPIC,
-        "direct": aio_pika.ExchangeType.DIRECT,
-    }.get(DLX_TYPE, aio_pika.ExchangeType.FANOUT)
-    dlx = await channel.declare_exchange(DLX_NAME, dlx_type, durable=True)
+    # Publicar en DLX existente para evitar conflictos de parámetros
+    dlx = await channel.get_exchange(DLX_NAME)
     body = json.dumps(payload).encode("utf-8")
     msg = aio_pika.Message(
         body=body,
@@ -246,8 +241,8 @@ async def _publish_to_dlq(channel: aio_pika.Channel, payload: Dict[str, Any], he
         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         headers=headers,
     )
-    routing = "" if dlx_type == aio_pika.ExchangeType.FANOUT else ROUTING_KEY
-    await dlx.publish(msg, routing_key=routing)
+    # Usar routing_key vacío por compatibilidad con fanout; para topic/direct no afecta si no hay bindings específicos
+    await dlx.publish(msg, routing_key="")
 
 async def _process_one(payload: Dict[str, Any]) -> None:
     """Procesa un único mensaje.
