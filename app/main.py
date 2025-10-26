@@ -9,6 +9,10 @@ import asyncio
 import logging
 import structlog
 import importlib
+import os
+import json
+import time
+from datetime import datetime
 
 def try_configure_logging(service_name: str, env: str = "dev") -> None:
     try:
@@ -17,8 +21,6 @@ def try_configure_logging(service_name: str, env: str = "dev") -> None:
     except Exception:
         import sys
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-import os
-import json
 
 from .messaging import publish_message, setup_infrastructure
 from .db import get_db, create_tables, init_default_channels, init_default_user
@@ -68,6 +70,9 @@ v1_router = APIRouter(prefix="/v1")
 try_configure_logging(service_name="notifications-service-micro", env=os.getenv("ENV","dev"))
 log: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+# Track application start time for health checks
+START_TIME = time.time()
+
 
 # Configuración para manejar UTF-8 automáticamente
 
@@ -85,7 +90,62 @@ async def on_startup() -> None:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    uptime_seconds = int(time.time() - START_TIME)
+    
+    return {
+        "status": "UP",
+        "version": "1.0.0",
+        "uptime": uptime_seconds,
+        "checks": [
+            {
+                "name": "Application",
+                "status": "UP",
+                "data": {
+                    "from": datetime.fromtimestamp(START_TIME).isoformat(),
+                    "status": "RUNNING"
+                }
+            }
+        ]
+    }
+
+@app.get("/health/ready")
+async def readiness() -> dict:
+    start_time = datetime.fromtimestamp(START_TIME)
+    
+    # TODO: Add actual health checks for PostgreSQL and RabbitMQ
+    is_ready = True  # Placeholder
+    
+    return {
+        "status": "UP" if is_ready else "DOWN",
+        "checks": [
+            {
+                "data": {
+                    "from": start_time.isoformat(),
+                    "status": "READY"
+                },
+                "name": "Readiness check",
+                "status": "UP" if is_ready else "DOWN"
+            }
+        ]
+    }
+
+@app.get("/health/live")
+async def liveness() -> dict:
+    start_time = datetime.fromtimestamp(START_TIME)
+    
+    return {
+        "status": "UP",
+        "checks": [
+            {
+                "data": {
+                    "from": start_time.isoformat(),
+                    "status": "ALIVE"
+                },
+                "name": "Liveness check",
+                "status": "UP"
+            }
+        ]
+    }
 
 
 @v1_router.post("/notifications")
