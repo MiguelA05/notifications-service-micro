@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import sys
 import os
 
-# Add app directory to Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../app')))
+# Add project root to Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from main import app
+from app.main import app
 
 
 @pytest.fixture
