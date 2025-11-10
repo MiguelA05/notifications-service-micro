@@ -31,9 +31,9 @@ class TestHealthEndpoints:
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "ok"
+        assert data["status"] == "UP"
         assert "uptime" in data
-        assert "service" in data
+        assert "checks" in data
 
     def test_health_includes_uptime(self, client):
         """Test que /health incluye uptime en segundos"""
@@ -46,14 +46,14 @@ class TestHealthEndpoints:
         """Test que /health incluye nombre del servicio"""
         response = client.get("/health")
         data = response.json()
-        assert data["service"] == "notifications-service-micro"
+        assert any(check.get("name") == "Application" for check in data.get("checks", []))
 
     def test_liveness_endpoint_returns_ok(self, client):
         """Test que /health/live retorna status OK"""
         response = client.get("/health/live")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "ok"
+        assert data["status"] == "UP"
         assert "checks" in data
 
 
@@ -126,7 +126,7 @@ class TestNotificationsEndpoint:
             "message": "Test message with special chars: áéíóú ñ"
         }
         
-        with patch('main.publish_message', new_callable=AsyncMock):
+        with patch('app.main.publish_message', new_callable=AsyncMock):
             response = client.post("/v1/notifications", json=payload)
             assert response.status_code == 200
 
@@ -235,7 +235,7 @@ class TestContentTypeValidation:
             "message": "Test"
         }
         
-        with patch('main.publish_message', new_callable=AsyncMock):
+        with patch('app.main.publish_message', new_callable=AsyncMock):
             response = client.post(
                 "/v1/notifications",
                 json=payload,
