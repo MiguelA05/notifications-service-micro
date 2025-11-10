@@ -1,9 +1,130 @@
-## Notifications Service Micro (Python/FastAPI)
+# Notifications Service Micro
 
-### Quickstart TL;DR
-- Requisitos: Docker y Docker Compose.
-- Configura `.env` mínimo (en la raíz):
+Microservicio desarrollado en Python con FastAPI que actúa como servicio de "Delivery" para el envío de notificaciones a través de múltiples canales (Email, SMS, WhatsApp, Push). Consume mensajes de RabbitMQ y realiza el envío real a los proveedores externos.
+
+## Descripción General
+
+Microservicio de "Delivery" de notificaciones que recibe eventos por RabbitMQ y envía por Email/SMS/WhatsApp/Push. Pensado para convivir con un Orquestador de Notificaciones y con los Microservicios de Dominio. Infraestructura lista para producción mínima: Docker Compose, PostgreSQL, RabbitMQ, autenticación JWT, reintentos y DLQ, y un Scheduler para envíos programados.
+
+## Arquitectura
+
+### Componentes Principales
+
+- **API FastAPI**: Endpoints HTTP para recepción directa de notificaciones
+- **Worker**: Consumidor de RabbitMQ que procesa colas de notificaciones
+- **Scheduler**: Programador de tareas para envíos programados
+- **Channels**: Implementaciones de canales de envío (Strategy Pattern)
+- **Database**: Persistencia de configuraciones y métricas
+- **Messaging**: Gestión de conexión y publicación en RabbitMQ
+
+### Tecnologías
+
+- FastAPI
+- SQLAlchemy (ORM)
+- PostgreSQL
+- aio-pika (Cliente asíncrono para RabbitMQ)
+- APScheduler
+- Jinja2 (Motor de plantillas)
+- Pydantic (Validación de datos)
+- Passlib (Hash de contraseñas)
+- python-jose (Manejo de tokens JWT)
+
+## Endpoints de la API
+
+### Health Checks
+
+#### Health Endpoint
+
+- **Endpoint**: `GET /health`
+- **Descripción**: Verifica el estado de salud del servicio
+- **Autenticación**: No requerida
+
+#### Liveness Endpoint
+
+- **Endpoint**: `GET /health/live`
+- **Descripción**: Verifica si el servicio está vivo
+- **Autenticación**: No requerida
+
+### Notificaciones
+
+#### Envío Simple de Notificación
+
+- **Endpoint**: `POST /v1/notifications`
+- **Descripción**: Envía una notificación a un canal específico
+- **Autenticación**: No requerida
+
+**Request Body**:
+```json
+{
+  "channel": "email",
+  "destination": "user@example.com",
+  "message": "Mensaje de prueba",
+  "subject": "Asunto del mensaje"
+}
+```
+
+#### Envío Multi-Canal
+
+- **Endpoint**: `POST /v1/notifications/multi`
+- **Descripción**: Envía notificaciones a múltiples canales simultáneamente
+- **Autenticación**: No requerida
+
+**Request Body**:
+```json
+{
+  "destination": {
+    "email": "user@example.com",
+    "sms": "+573001234567",
+    "whatsapp": "+573001234567"
+  },
+  "message": {
+    "email": "<html><body><h1>Mensaje HTML</h1></body></html>",
+    "sms": "Mensaje de texto para SMS",
+    "whatsapp": "Mensaje de texto para WhatsApp"
+  },
+  "subject": "Asunto del mensaje",
+  "metadata": {
+    "tenantId": "acme",
+    "template": "welcome"
+  }
+}
+```
+
+#### Envío Multi-Canal con Autenticación
+
+- **Endpoint**: `POST /v1/notifications/multi/auth`
+- **Descripción**: Igual que multi pero requiere autenticación JWT
+- **Autenticación**: Requerida (JWT Bearer Token)
+
+### Autenticación
+
+#### Login
+
+- **Endpoint**: `POST /login`
+- **Descripción**: Autentica un usuario y genera token JWT
+- **Autenticación**: No requerida
+
+#### Registro
+
+- **Endpoint**: `POST /register`
+- **Descripción**: Registra un nuevo usuario (solo para pruebas)
+- **Autenticación**: No requerida
+
+## Canales de Notificación
+
+El sistema soporta los siguientes canales:
+
+- **Email**: Envío vía SMTP con soporte HTML
+- **SMS**: Envío vía Twilio
+- **WhatsApp**: Envío vía Twilio WhatsApp API
+- **Push**: Envío vía Firebase Cloud Messaging (FCM)
+
+## Configuración
+
+### Variables de Entorno
+
 ```env
+# RabbitMQ
 RABBITMQ_HOST=rabbitmq
 RABBITMQ_PORT=5672
 RABBITMQ_VHOST=foro
@@ -17,373 +138,77 @@ AMQP_DLX_NAME=dlx
 AMQP_DLX_TYPE=topic
 MESSAGING_DECLARE_INFRA=false
 WORKER_DECLARE_INFRA=false
+
+# Base de Datos
 DB_URL=postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
-# SMTP opcional para email (usar App Password de Gmail)
-# SMTP_HOST=smtp.gmail.com
-# SMTP_PORT=587
-# SMTP_USER=tu_correo@gmail.com
-# SMTP_PASSWORD=app_password_16_chars
-# FROM_EMAIL=tu_correo@gmail.com
-# FROM_NAME=Notifications Service
+
+# JWT
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Email (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=app-password
+FROM_EMAIL=your-email@gmail.com
+FROM_NAME=Notifications Service
+
+# Twilio (SMS/WhatsApp)
+TWILIO_ACCOUNT_SID=your-account-sid
+TWILIO_AUTH_TOKEN=your-auth-token
+TWILIO_FROM_NUMBER=+1234567890
+TWILIO_WHATSAPP_FROM=whatsapp:+1234567890
+WHATSAPP_WEBHOOK_URL=https://your-domain.com/webhook/whatsapp
+
+# Firebase (Push)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+WEB_VAPID_PUBLIC_KEY=your-public-key
+WEB_VAPID_PRIVATE_KEY=your-private-key
+
+# Worker
+WORKER_MAX_RETRIES=3
+WORKER_RETRY_DELAY_1=5
+WORKER_RETRY_DELAY_2=30
+WORKER_RETRY_DELAY_3=120
+DEFAULT_CHANNEL=email
 ```
-- Levantar stack:
+
+## Uso
+
+### Quickstart
+
+1. Configurar archivo `.env` con las variables necesarias
+2. Levantar stack con Docker Compose:
 ```bash
 docker compose build --no-cache
 docker compose up -d
 ```
-- Verificar:
+
+3. Verificar estado:
 ```bash
-curl http://localhost:8080/health        # {"status":"ok"}
-docker ps                                 # contenedores Up/healthy
+curl http://localhost:8080/health
+docker ps
 ```
-- Prueba rápida (SMS o similar):
+
+### Envío Simple
+
 ```bash
-curl -X POST "http://localhost:8080/notify" \
-  -H "Content-Type: application/json" \
-  -d '{"channel":"sms","destination":"+573225035863","message":"Hola!"}'
-```
-- Multi‑canal:
-```bash
-curl -X POST "http://localhost:8080/notify-multi" \
-  -H "Content-Type: application/json" \
-  -d '{"destination":{"sms":"+573225035863"},"message":{"sms":"Hola multi!"}}'
-```
-- Logs útiles:
-```bash
-docker logs notifications-service-micro --since=1m
-docker logs notifications-worker --since=1m
-```
-
-### Descripción general
-- Microservicio de “Delivery” de notificaciones. Recibe eventos por RabbitMQ y envía por Email/SMS/WhatsApp/Push.
-- Pensado para convivir con un Orquestador de Notificaciones (otro servicio) y con los Microservicios de Dominio (usuarios, ventas, etc.).
-- Infraestructura lista para producción mínima: Docker Compose, PostgreSQL, RabbitMQ, autenticación JWT, reintentos y DLQ, y un Scheduler para envíos programados.
-
----
-
-## Arquitectura y relación con otros servicios
-- Servicios de Dominio: publican eventos al Orquestador.
-- Orchestrator (servicio aparte): aplica reglas, elige canal y publica al exchange de notificaciones en RabbitMQ.
-- Este proyecto (Delivery): consume la cola de notificaciones y realiza el envío real a los proveedores.
-
-### Vista general (diagrama)
-```mermaid
-flowchart LR
-    A[Servicios de Dominio] -->|Eventos| B[Notification Orchestrator]
-    B -->|publica| C[RabbitMQ vhost foro]
-    C -->|notifications.queue| D[Delivery Worker]
-    D --> E1[SMTP Email]
-    D --> E2[Twilio SMS]
-    D --> E3[Twilio WhatsApp]
-    D --> E4[FCM WebPush]
-    subgraph API
-        F[FastAPI notify]
-    end
-    F --> C
-    subgraph Scheduler
-        G[APScheduler]
-    end
-    G -->|publica programado| C
-```
-
-### Topología de RabbitMQ (simplificada)
-```mermaid
-flowchart TB
-    X["orquestador.events (topic)"] --> Q["notifications.queue"]
-
-    subgraph Retries
-        XR1["orquestador.events.retry.1"] --> R1["notifications.queue.retry.1 (TTL 5s)"]
-        XR2["orquestador.events.retry.2"] --> R2["notifications.queue.retry.2 (TTL 30s)"]
-        XR3["orquestador.events.retry.3"] --> R3["notifications.queue.retry.3 (TTL 120s)"]
-    end
-
-    subgraph DeadLetter
-        DLX_EX["dlx (topic)"] --> DLQ_Q["notifications.queue.dlq"]
-    end
-```
-
-Nota: En este stack, los reintentos se publican reutilizando el exchange existente (get_exchange) sin redeclarar recursos ya definidos en el broker para evitar PRECONDITION_FAILED.
-
-### Diagrama general de la plataforma (con BDs)
-```mermaid
-flowchart LR
-    subgraph Dominio
-        APP[Aplicacion de Dominio];
-        DB_APP[(BD Dominio)];
-        APP <--> DB_APP;
-    end
-
-    subgraph Orquestador
-        ORCH[Orquestador de Notificaciones];
-        DB_ORCH[(BD Orquestador)];
-        ORCH <--> DB_ORCH;
-    end
-
-    subgraph Delivery
-        API[Servicio de Notificaciones API];
-        WRK[Worker de Entrega];
-        SCH[Scheduler];
-    end
-
-    MQ[(RabbitMQ)];
-
-    APP -->|Eventos| ORCH;
-    ORCH -->|publica| MQ;
-    API -->|/notify| MQ;
-    SCH -->|programa| MQ;
-    MQ --> WRK;
-
-    WRK --> SMTP[SMTP Email];
-    WRK --> SMS[Twilio SMS];
-    WRK --> WA[Twilio WhatsApp];
-    WRK --> PUSH[FCM WebPush];
-```
-
-### Flujo completo de microservicios (interacciones detalladas)
-```mermaid
-sequenceDiagram
-    participant U as Usuario/Cliente
-    participant D as Servicio Dominio
-    participant O as Orquestador
-    participant MQ as RabbitMQ
-    participant API as API Notificaciones
-    participant W as Worker
-    participant S as Scheduler
-    participant P as Proveedores Externos
-
-    Note over U,P: Flujo 1: Notificación inmediata
-    U->>D: Acción del usuario (registro, compra, etc.)
-    D->>D: Procesa lógica de negocio
-    D->>O: Evento: {event_type, user, template, params}
-    O->>O: Aplica reglas de orquestación
-    O->>O: Selecciona canal y resuelve plantilla
-    O->>MQ: Publica mensaje listo para envío
-    MQ->>W: Consume de notifications.queue
-    W->>W: Identifica canal (email/sms/whatsapp/push)
-    W->>P: Envía notificación al proveedor
-    P-->>W: Respuesta (éxito/fallo)
-    
-    alt Fallo temporal
-        W->>MQ: Reencola en retry.1 (5s)
-        MQ->>W: Reintenta después de 5s
-        W->>P: Reintenta envío
-    else Fallo persistente
-        W->>MQ: Envía a DLQ
-    end
-
-    Note over U,P: Flujo 2: Notificación programada
-    U->>API: POST /notifications/schedule
-    API->>API: Valida y almacena en BD
-    API->>S: Programa tarea para fecha futura
-    S->>S: Espera hasta fecha programada
-    S->>MQ: Publica mensaje cuando llega la hora
-    MQ->>W: Procesa como flujo normal
-
-    Note over U,P: Flujo 3: Consulta y gestión
-    U->>API: GET /notifications (con filtros)
-    API->>API: Consulta BD con filtros/paginación
-    API-->>U: Lista de notificaciones
-    
-    U->>API: GET /schedules
-    API->>API: Consulta schedules pendientes
-    API-->>U: Lista de schedules programados
-    
-    U->>API: DELETE /schedules/{id}
-    API->>API: Cancela schedule pendiente
-    API-->>U: Confirmación de cancelación
-
-    Note over U,P: Flujo 4: Webhooks y respuestas
-    P->>API: Webhook (WhatsApp, SMS status)
-    API->>API: Procesa respuesta del proveedor
-    API->>API: Actualiza estado en BD
-```
-
----
-
-## RabbitMQ (vhost foro)
-
-#### Notas de persistencia por componente
-- BD Dominio:
-  - Datos de negocio (usuarios, pedidos, etc.).
-  - Fuente de verdad para la Aplicación de Dominio y autenticación externa si aplica.
-- BD Orquestador:
-  - Reglas de orquestación, plantillas base, preferencias/opt‑in por usuario, historial de orquestaciones y correlación de eventos.
-  - Útil para trazabilidad entre evento de negocio y mensajes construidos (trace_id, event_id).
-- BD del Servicio de Notificaciones (Delivery):
-  - `NotificationChannelConfig`: credenciales y parámetros por canal (SMTP/Twilio/FCM, etc.).
-  - `Notification`: registro mínimo de envíos (opcional si lo requiere auditoría).
-  - `NotificationMetrics`: agregados simples para monitoreo.
-  - `User`: soporte de autenticación JWT del propio servicio (login/register de pruebas).
-  - Este servicio no almacena plantillas fuertes ni reglas; recibe el mensaje ya construido desde el Orquestador.
-- Usuarios (roles usados en este stack local):
-  - orchestrator_user/orch_pass: permisos totales en vhost foro (usado por API/Worker).
-  - admin/admin_pass: administración del broker.
-- Topología efectiva (pre-cargada vía definitions.json):
-  - Exchange principal: orquestador.events (topic, durable)
-  - Cola principal: notifications.queue (durable, x-dead-letter-exchange=dlx)
-  - Exchange DLX: dlx (topic) → Cola DLQ: notifications.queue.dlq
-  - Binding: orquestador.events → notifications.queue con routing key notifications.*
-  - Retries: gestionados por el worker (opcional) sin redeclarar exchanges/colas del broker.
-
----
-
-## Componentes del proyecto (carpeta app/)
-- main.py: API FastAPI.
-  - /health: healthcheck.
-  - /notify: publica un payload en RabbitMQ.
-  - /notify-auth: igual que /notify pero protegido con JWT.
-  - /login y /register: autenticación/registro básica para pruebas.
-  - /webhook/whatsapp: ejemplo de recepción de webhooks.
-- messaging.py: conexión a RabbitMQ (publicación y setup básico compatible con la topología del worker).
-- worker.py: consumidor de RabbitMQ.
-  - Lee de notifications.queue, ejecuta el envío usando el Strategy de canales y gestiona reintentos/DLQ.
-- scheduler.py: Scheduler (APScheduler) para programar envíos y publicar en RabbitMQ cuando corresponda.
-- channels/*: canales concretos con Strategy Pattern.
-  - base.py: interfaz abstracta Channel.
-  - email.py, sms.py, whatsapp.py, push.py.
-  - factory.py: mapea enum → implementación correspondiente.
-- db.py, models.py: SQLAlchemy ORM (tablas, modelos y semillas de configuración de canales) y sesión a PostgreSQL.
-- auth.py: utilidades de JWT y hashing de contraseñas (passlib/python-jose).
-- templates/: plantillas Jinja2 para correos.
-
----
-
-## Flujos principales
-1) Envío estándar (end-to-end):
-   - Cliente/Orchestrator publica un evento con canal/destino/mensaje en notifications.exchange (routing key notifications.key).
-   - Este servicio lo publica vía API (/notify) o el Orchestrator lo publica directamente.
-   - Worker consume de notifications.queue, crea el Channel correcto (factory) y ejecuta el envío.
-   - Si falla, reintenta con backoff. Si agota reintentos, se envía a DLQ.
-
-2) Envío programado:
-   - scheduler.py agenda un job (ejemplo demo) y, al llegar la hora, publica el payload en RabbitMQ.
-   - El worker procesa el mensaje como en el flujo normal.
-
----
-
-## Variables de entorno (archivo .env)
-RabbitMQ
-- RABBITMQ_HOST=rabbitmq
-- RABBITMQ_PORT=5672
-- RABBITMQ_VHOST=foro
-- RABBITMQ_USERNAME=orchestrator_user
-- RABBITMQ_PASSWORD=orch_pass
-- AMQP_EXCHANGE=orquestador.events
-- AMQP_EXCHANGE_TYPE=topic
-- AMQP_QUEUE=notifications.queue
-- AMQP_ROUTING_KEY=notifications.created
-- AMQP_DLX_NAME=dlx
-- AMQP_DLX_TYPE=topic
-- MESSAGING_DECLARE_INFRA=false # el broker ya trae la topología por definitions.json
-
-JWT
-- SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-
-Base de datos
-- DB_URL=postgresql+psycopg2://notifications:notifications@postgres:5432/notifications
-
-Email (SMTP)
-- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, FROM_EMAIL, FROM_NAME
-
-Twilio (SMS/WhatsApp)
-- TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, TWILIO_WHATSAPP_FROM, WHATSAPP_WEBHOOK_URL
-
-Push (Firebase / Web Push)
-- FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_KEY (JSON de service account en una sola línea)
-- WEB_VAPID_PUBLIC_KEY, WEB_VAPID_PRIVATE_KEY
-
-Worker (reintentos)
-- WORKER_MAX_RETRIES=3
-- WORKER_RETRY_DELAY_1=5
-- WORKER_RETRY_DELAY_2=30
-- WORKER_RETRY_DELAY_3=120
-- DEFAULT_CHANNEL=email
-- WORKER_DECLARE_INFRA=false # no redeclarar si el broker ya trae la topología
-
-Scheduler (demo)
-- SCHEDULER_DEMO_CHANNEL, SCHEDULER_DEMO_DESTINATION, SCHEDULER_DEMO_DELAY_SEC
-
----
-
-## Ejecución (Docker Compose)
-1) docker compose build --no-cache
-2) docker compose up -d
-3) Verificar estado:
-   - docker ps
-   - RabbitMQ UI: http://localhost:15672 (admin/admin_pass). Vhost: foro.
-4) Logs rápidos:
-   - API: docker logs notifications-service-micro --since=1m
-   - Worker: docker logs notifications-worker --since=1m
-   - Scheduler: docker logs notifications-scheduler --since=1m
-
----
-
-## Pruebas rápidas
-Healthcheck
-- curl http://localhost:8080/health → {"status":"ok"}
-
-Publicar un mensaje simple
-- curl -X POST "http://localhost:8080/v1/notifications" -H "Content-Type: application/json" -d '{"channel":"sms","destination":"+573225035863","message":"Prueba"}'
-- Monitorear worker: docker logs -f notifications-worker
-
-Publicar multi‑canal (usa orquestador.events y encola para sms/email)
-- curl -X POST "http://localhost:8080/v1/notifications/multi" \
+curl -X POST "http://localhost:8080/v1/notifications" \
   -H "Content-Type: application/json" \
   -d '{
-    "destination": {"email": "juan@example.com", "sms": "+573225035863"},
-    "message": {"email": "<html><body><b>Hola</b></body></html>", "sms": "Hola por SMS"},
-    "subject": "Prueba multi"
+    "channel": "sms",
+    "destination": "+573225035863",
+    "message": "Hola!"
   }'
+```
 
-Listado con filtros y paginación
-- curl "http://localhost:8080/notifications?channel=sms&status=pending&q=Prueba&page=1&size=10"
+### Envío Multi-Canal
 
-### Manejo de Mensajes HTML vs Texto
-
-El sistema ahora soporta mensajes específicos por canal:
-
-- **Email**: Recibe contenido HTML que se renderiza directamente
-- **SMS**: Recibe texto plano (sin HTML)
-- **WhatsApp**: Recibe texto plano con soporte para emojis y saltos de línea
-- **Push**: Recibe texto plano
-
-Los templates HTML son manejados por el orquestador, no por este servicio.
-
-### Nuevos endpoints multi-canal
-
-**POST /v1/notifications/multi** - Envío a múltiples canales (sin autenticación)
 ```bash
 curl -X POST "http://localhost:8080/v1/notifications/multi" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "destination": {
-      "email": "juan@example.com",
-      "sms": "+573225035863",
-      "whatsapp": "+573225035863"
-    },
-    "message": {
-      "email": "<html><body><h1>¡Hola Juan!</h1><p>Mensaje HTML para email</p></body></html>",
-      "sms": "¡Hola Juan! Mensaje de texto para SMS",
-      "whatsapp": "¡Hola Juan! 👋\n\nMensaje de texto para WhatsApp"
-    },
-    "subject": "Mensaje de prueba",
-    "metadata": {
-      "tenantId": "acme",
-      "template": "welcome"
-    }
-  }'
-```
-
-**POST /v1/notifications/multi/auth** - Envío a múltiples canales (con autenticación JWT)
-```bash
-# Primero obtener token
-curl -X POST "http://localhost:8080/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=admin_pass"
-
-# Luego enviar notificación
-curl -X POST "http://localhost:8080/v1/notifications/multi/auth" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "destination": {
@@ -391,208 +216,173 @@ curl -X POST "http://localhost:8080/v1/notifications/multi/auth" \
       "sms": "+573225035863"
     },
     "message": {
-      "email": "<html><body><h1>Mensaje importante</h1><p>Contenido HTML autenticado</p></body></html>",
-      "sms": "Mensaje importante - Contenido texto autenticado"
+      "email": "<html><body><b>Hola</b></body></html>",
+      "sms": "Hola por SMS"
     },
-    "subject": "Mensaje importante"
+    "subject": "Prueba multi"
   }'
 ```
 
----
+## Estructura del Proyecto
 
-## Notas de seguridad
-- No publiques el JSON de la service account de Firebase.
-- Aísla usuarios y permisos por vhost; en producción, separa aún más los roles y usa TLS si es necesario.
-- Gmail SMTP: usa App Password (16 caracteres) con 2FA; no utilices la contraseña normal. Evita espacios en el App Password.
-- Twilio SMS: habilita Geo Permissions para el país destino (p.ej., Colombia), adquiere un número con capacidad SMS y, si tu cuenta es Trial, verifica el número destino.
-
----
-
-## Guía de extensibilidad (añadir un canal nuevo)
-1) Crear app/channels/<nuevo>.py implementando Channel.
-2) Registrar en app/channels/factory.py.
-3) Añadir config por defecto en db.init_default_channels si aplica.
-4) Documentar nuevas variables en este README.
-
----
-
-## Solución de problemas (FAQ)
-- ACCESS_REFUSED (RabbitMQ):
-  - Verifica usuario, contraseña, vhost y permisos. Este servicio usa notifications_user/notif_pass en el vhost foro.
-- PRECONDITION_FAILED (inequivalent arg auto_delete/x-dead-letter-exchange):
-  - Evita redeclarar exchanges/colas creados por el broker. El API usa get_exchange y el worker evita redeclaración en reintentos.
-- python-multipart requerido:
-  - Añadido en requirements. Si usas formularios, debe estar instalado.
-- Template Jinja2 no encontrado:
-  - Verifica rutas y que templates/ esté copiado al contenedor.
-
----
-
-## Glosario
-- Exchange: Punto de distribución donde se publican mensajes en RabbitMQ.
-- Queue (Cola): Buzón del que consumen los workers.
-- Routing Key: Etiqueta usada por el exchange para direccionar mensajes.
-- DLQ (Dead Letter Queue): Cola para mensajes que no pudieron procesarse definitivamente.
-- DLX (Dead Letter Exchange): Exchange que recibe mensajes muertos y los redirige a la DLQ.
-- TTL (Time-To-Live): Tiempo de vida de un mensaje en una cola; al expirar puede redirigirse vía DLX.
-- Backoff exponencial: Reintentos con esperas crecientes (p.ej., 5s, 30s, 120s).
-- Strategy Pattern: Patrón que permite cambiar el “cómo enviar” (email/sms/etc.) sin cambiar el consumidor.
-- Factory Pattern: Componente que crea la implementación correcta de Channel según el enum.
-- Vhost: Espacio lógico aislado dentro de RabbitMQ; permite separar permisos y recursos.
-- APScheduler: Librería para programar tareas/asignar triggers (DateTrigger, intervalos, cron, etc.).
-- JWT: Token de autenticación para proteger endpoints.
-
----
-
-## Mantenimiento de este README
-- Si se modifica la infraestructura (topología, variables, servicios o permisos), actualiza aquí los cambios.
-
----
-
-## Contratos de datos entre microservicios (mensajes y ejemplo práctico)
-### 1) Evento desde un Servicio de Dominio → Orquestador
-- El dominio envía información “de intención” (qué pasó y a quién), NO un mensaje listo para enviar.
-```json
-{
-  "event_id": "evt_1a2b3c",
-  "event_type": "user.welcome",
-  "user": {
-    "id": 123,
-    "email": "ana@example.com",
-    "phone_e164": "+573001112233",
-    "whatsapp_e164": "+573001112233",
-    "push_token": "fcm_device_token"
-  },
-  "template": "welcome",
-  "params": {"first_name": "Ana"},
-  "preferred_channels": ["email", "push"],
-  "schedule_at": null,
-  "metadata": {"source": "app-web"}
-}
+```
+notifications-service-micro/
+├── app/
+│   ├── main.py
+│   ├── messaging.py
+│   ├── worker.py
+│   ├── scheduler.py
+│   ├── channels/
+│   │   ├── base.py
+│   │   ├── email.py
+│   │   ├── sms.py
+│   │   ├── whatsapp.py
+│   │   ├── push.py
+│   │   └── factory.py
+│   ├── db.py
+│   ├── models.py
+│   └── auth.py
+├── tests/
+│   └── test_main_api.py
+├── docs/
+│   └── IMPLEMENTATION.md
+├── Dockerfile
+├── requirements.txt
+├── pytest.ini
+└── README.md
 ```
 
-### 2) Mensaje del Orquestador → RabbitMQ (consumido por este servicio)
-- El orquestador "construye" el mensaje listo para entrega: selecciona canal(es), resuelve plantillas y datos.
+## Integración con RabbitMQ
 
-#### Formato Multi-Canal (NUEVO)
-```json
-{
-  "destination": {
-    "email": "ana@example.com",
-    "sms": "+573225035863",
-    "whatsapp": "+573225035863",
-    "push": "fcm_device_token_12345"
-  },
-  "message": {
-    "email": "<html><body><h1>¡Bienvenida Ana!</h1><p>Gracias por registrarte en nuestro servicio.</p><p>Tu cuenta ha sido activada exitosamente.</p></body></html>",
-    "sms": "¡Bienvenida Ana! Gracias por registrarte. Tu cuenta ha sido activada.",
-    "whatsapp": "¡Hola Ana! 👋\n\nGracias por registrarte en nuestro servicio.\n\nTu cuenta ha sido activada exitosamente. 🎉",
-    "push": "¡Bienvenida Ana! Tu cuenta ha sido activada."
-  },
-  "subject": "¡Bienvenida, Ana!",
-  "metadata": {
-    "tenantId": "acme",
-    "template": "welcome",
-    "event_id": "evt_1a2b3c",
-    "event_type": "user.welcome",
-    "trace_id": "tr_9x8y7z"
-  }
-}
-```
+### Topología
 
-#### Formato Simple (Compatible con versión anterior)
+- **Exchange**: `orquestador.events` (tipo topic, durable)
+- **Cola Principal**: `notifications.queue` (durable, x-dead-letter-exchange=dlx)
+- **Exchange DLX**: `dlx` (tipo topic) → Cola DLQ: `notifications.queue.dlq`
+- **Binding**: `orquestador.events` → `notifications.queue` con routing key `notifications.*`
+
+### Formato de Mensajes
+
+#### Formato Simple
+
 ```json
 {
   "channel": "email",
-  "destination": "ana@example.com",
-  "subject": "¡Bienvenida, Ana!",
-  "message": "Hola Ana, gracias por registrarte.",
+  "destination": "user@example.com",
+  "message": "Contenido del mensaje",
+  "subject": "Asunto"
+}
+```
+
+#### Formato Multi-Canal
+
+```json
+{
+  "destination": {
+    "email": "user@example.com",
+    "sms": "+573001234567"
+  },
+  "message": {
+    "email": "<html>...</html>",
+    "sms": "Texto plano"
+  },
+  "subject": "Asunto",
   "metadata": {
-    "event_id": "evt_1a2b3c",
-    "event_type": "user.welcome",
-    "trace_id": "tr_9x8y7z"
+    "tenantId": "acme",
+    "template": "welcome"
   }
 }
 ```
 
-### Variantes por canal (payload esperado por el Delivery)
-- email:
-```json
-{"channel":"email","destination":"ana@example.com","subject":"Asunto","message":"Cuerpo"}
-```
-- sms:
-```json
-{"channel":"sms","destination":"+573001112233","message":"Texto corto"}
-```
-- whatsapp:
-```json
-{"channel":"whatsapp","destination":"+573001112233","message":"Texto WA"}
-```
-- push:
-```json
-{"channel":"push","destination":"fcm_device_token","subject":"Título","message":"Body"}
+## Testing
+
+El proyecto incluye una suite completa de tests:
+
+- **Unit Tests**: Pruebas de canales y lógica de negocio
+- **Integration Tests**: Pruebas de endpoints con TestClient (30+ tests)
+- **Mocking**: Uso de mocks para proveedores externos
+
+Ejecutar tests:
+```bash
+pytest
 ```
 
-### Ejemplo práctico (user.welcome)
-1) Dominio emite el evento (intención): ver ejemplo 1.
-2) Orquestador aplica reglas:
-   - Elige canal “email” si existe email válido; como fallback, “push”.
-   - Resuelve plantilla "welcome" con {first_name:"Ana"} → subject y body renderizados.
-  - Publica a RabbitMQ (exchange orquestador.events, routing key notifications.*) el payload del ejemplo 2; el binding a notifications.queue está definido en definitions.json.
-3) Este Delivery consume de notifications.queue y envía por el canal indicado.
+## Despliegue
 
-### Diagrama de secuencia (resumen)
-```mermaid
-sequenceDiagram
-    participant D as Dominio
-    participant O as Orchestrator
-    participant MQ as RabbitMQ
-    participant W as Delivery-Worker
-    participant P as Proveedor (Email/SMS/Push/WA)
+### Docker Compose
 
-    D->>O: Evento {event_type, user, template, params}
-    O->>O: Reglas + Plantillas + Selección de canal
-    O->>MQ: Publish {channel, destination, subject, message, data}
-    W->>MQ: Consume notifications.queue
-    W->>P: Enviar por canal (proveedor)
-    P-->>W: Respuesta OK/Fail
-    alt fallo temporal
-        W->>MQ: Reencola en retry.{1..3}
-    else fallo definitivo
-        W->>MQ: Envía a DLQ
-    end
+Configurado en `docker-compose.unified.yml`:
+- **API**: Puerto 8080
+- **Worker**: Proceso separado
+- **Scheduler**: Proceso separado
+- Dependencias: PostgreSQL, RabbitMQ
+
+### Logs
+
+```bash
+# API
+docker logs notifications-service-micro --since=1m
+
+# Worker
+docker logs notifications-worker --since=1m
+
+# Scheduler
+docker logs notifications-scheduler --since=1m
 ```
 
-### Validaciones mínimas que hace el Delivery
-- Requiere `channel` válido y `destination` con formato del canal (email válido, E.164 para SMS/WA, token para push).
-- Si faltan campos o el proveedor responde error no recuperable, el mensaje terminará en DLQ tras reintentos.
+## Flujos de Procesamiento
 
----
+### Flujo de Envío Directo (API)
 
-## ✅ Estado Actual del Sistema (Verificado 24/09/2025)
+1. Cliente envía `POST /v1/notifications` con datos de notificación
+2. API recibe la solicitud y valida datos con Pydantic
+3. Publica mensaje en RabbitMQ
+4. Worker consume mensaje y procesa envío
+5. Retorna respuesta HTTP 200 con confirmación
 
-### Endpoints Funcionando Correctamente
-- ✅ `GET /health` - Health check del servicio
-- ✅ `POST /notify` - Notificaciones directas (email, sms, whatsapp, push)
-- ✅ `POST /notify-multi` - Notificaciones multi-canal
-- ✅ `POST /login` - Autenticación JWT
-- ✅ `POST /register` - Registro de usuarios para pruebas
+### Flujo de Consumo de Worker
 
-### Integración con Microservicios
-- ✅ **Domain Service**: Publica eventos a RabbitMQ que son procesados por el Orchestrator
-- ✅ **Orchestrator**: Procesa eventos y envía notificaciones via `/notify-multi`
-- ✅ **Worker**: Procesa colas de notificaciones y envía emails/SMS correctamente
-- ✅ **RabbitMQ**: Topología configurada y funcionando (vhost: foro)
+1. Worker consume mensaje de `notifications.queue`
+2. Deserializa payload JSON
+3. Identifica canal usando Factory
+4. Crea instancia de canal apropiado
+5. Ejecuta `channel.send()` con datos del mensaje
+6. Si éxito, confirma mensaje (ACK)
+7. Si fallo, reencola en cola de reintento
+8. Si agota reintentos, envía a DLQ
 
-### Flujo End-to-End Verificado
-1. **Registro de usuario** en Domain Service → Evento publicado a RabbitMQ
-2. **Orchestrator procesa** el evento → Envía notificación via `/notify-multi`
-3. **Worker consume** la cola → Envía email/SMS al usuario
-4. **Notificaciones directas** via `/notify` funcionan correctamente
+### Flujo de Reintentos
 
-### Datos de Prueba Confirmados
-- **Email de prueba**: `miraortega2020@gmail.com` ✅
-- **SMS de prueba**: `+573225035863` ✅
-- **Base de datos**: Eventos y notificaciones persistiendo correctamente
+1. Worker detecta fallo en envío
+2. Incrementa contador de reintentos
+3. Publica mensaje en cola de reintento con TTL:
+   - Retry 1: 5 segundos
+   - Retry 2: 30 segundos
+   - Retry 3: 120 segundos
+4. Mensaje expira y vuelve a cola principal
+5. Worker reintenta envío
+6. Si agota 3 reintentos, envía a DLQ
 
+## Consideraciones de Seguridad
 
+1. **Autenticación JWT**: Validación de tokens en endpoints protegidos
+2. **Validación de entrada**: Validación exhaustiva con Pydantic
+3. **Credenciales**: Almacenadas en variables de entorno
+4. **HTTPS**: Usar en producción para proteger datos en tránsito
+5. **Rate Limiting**: Considerar implementar límites de solicitudes
+
+## Notas
+
+- Para documentación detallada, consultar `docs/IMPLEMENTATION.md`
+- Gmail SMTP: usar App Password (16 caracteres) con 2FA
+- Twilio SMS: habilitar Geo Permissions para el país destino
+- No publicar el JSON de la service account de Firebase
+
+## Extensibilidad
+
+Para añadir un canal nuevo:
+
+1. Crear `app/channels/<nuevo>.py` implementando Channel
+2. Registrar en `app/channels/factory.py`
+3. Añadir config por defecto en `db.init_default_channels` si aplica
+4. Documentar nuevas variables en este README
