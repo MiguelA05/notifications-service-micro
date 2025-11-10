@@ -19,7 +19,7 @@ def client():
 @pytest.fixture
 def mock_publish():
     """Mock para publish_message"""
-    with patch('main.publish_message', new_callable=AsyncMock) as mock:
+    with patch('app.main.publish_message', new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -60,7 +60,7 @@ class TestHealthEndpoints:
 class TestNotificationsEndpoint:
     """Tests para el endpoint /v1/notifications"""
 
-    @patch('main.publish_message', new_callable=AsyncMock)
+    @patch('app.main.publish_message', new_callable=AsyncMock)
     async def test_notify_success(self, mock_publish, client):
         """Test de envío de notificación exitosa"""
         payload = {
@@ -139,7 +139,7 @@ class TestNotificationsEndpoint:
         )
         assert response.status_code == 422 or response.status_code == 400
 
-    @patch('main.publish_message', new_callable=AsyncMock)
+    @patch('app.main.publish_message', new_callable=AsyncMock)
     async def test_notify_with_optional_fields(self, mock_publish, client):
         """Test con campos opcionales"""
         payload = {
@@ -157,7 +157,7 @@ class TestNotificationsEndpoint:
 class TestMultiNotificationsEndpoint:
     """Tests para el endpoint /v1/notifications/multi"""
 
-    @patch('main.publish_message', new_callable=AsyncMock)
+    @patch('app.main.publish_message', new_callable=AsyncMock)
     async def test_notify_multi_success(self, mock_publish, client):
         """Test de envío múltiple exitoso"""
         payload = {
@@ -197,7 +197,7 @@ class TestMultiNotificationsEndpoint:
         response = client.post("/v1/notifications/multi", json=payload)
         assert response.status_code == 400
 
-    @patch('main.publish_message', new_callable=AsyncMock)
+    @patch('app.main.publish_message', new_callable=AsyncMock)
     async def test_notify_multi_with_different_channels(self, mock_publish, client):
         """Test con diferentes canales"""
         payload = {
@@ -252,7 +252,7 @@ class TestContentTypeValidation:
 class TestErrorHandling:
     """Tests para manejo de errores"""
 
-    @patch('main.publish_message', side_effect=Exception("RabbitMQ connection failed"))
+    @patch('app.main.publish_message', side_effect=Exception("RabbitMQ connection failed"))
     async def test_handles_rabbitmq_failure(self, mock_publish, client):
         """Test que maneja fallo de RabbitMQ"""
         payload = {
