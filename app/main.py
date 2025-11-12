@@ -111,12 +111,15 @@ async def health() -> dict:
 @app.get("/health/ready")
 async def readiness() -> dict:
     start_time = datetime.fromtimestamp(START_TIME)
+    uptime_seconds = int(time.time() - START_TIME)
     
     # TODO: Add actual health checks for PostgreSQL and RabbitMQ
     is_ready = True  # Placeholder
     
     return {
         "status": "UP" if is_ready else "DOWN",
+        "version": "1.0.0",
+        "uptime": uptime_seconds,
         "checks": [
             {
                 "data": {
@@ -132,9 +135,12 @@ async def readiness() -> dict:
 @app.get("/health/live")
 async def liveness() -> dict:
     start_time = datetime.fromtimestamp(START_TIME)
+    uptime_seconds = int(time.time() - START_TIME)
     
     return {
         "status": "UP",
+        "version": "1.0.0",
+        "uptime": uptime_seconds,
         "checks": [
             {
                 "data": {
